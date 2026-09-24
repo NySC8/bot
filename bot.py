@@ -5,72 +5,52 @@ import logging
 import os
 import re
 import sqlite3
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 import feedparser
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
+from google import genai
 from telegram import Bot
 from telegram.constants import ParseMode
 
-
-# ============================================================
-# NABZ NEWS BOT
-# ============================================================
-#
-# اهداف:
-# - دریافت سریع خبر
-# - جلوگیری از انتشار خبر قدیمی
-# - جلوگیری از انتشار تکراری
-# - چندمنبعی
-# - دسته‌بندی موضوعی
-# - آماده برای ترجمه/AI
-# - کنترل سرعت انتشار
-#
-# ============================================================
-
-
 load_dotenv()
-
-
-# ============================================================
-# LOGGING
-# ============================================================
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format="%(asctime)s %(levelname)s %(message)s",
 )
 
-logger = logging.getLogger("nabz")
-
-
-# ============================================================
-# TELEGRAM
-# ============================================================
+# =========================================================
+# CONFIG
+# =========================================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 GROUP_CHAT_ID = os.getenv("GROUP_CHAT_ID", "").strip()
 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+
+POLL_MINUTES = int(os.getenv("POLL_MINUTES", "5"))
+MAX_NEWS_AGE_MINUTES = int(os.getenv("MAX_NEWS_AGE_MINUTES", "10"))
+MAX_FUTURE_MINUTES = int(os.getenv("MAX_FUTURE_MINUTES", "5"))
+MAX_ITEMS_PER_FEED = int(os.getenv("MAX_ITEMS_PER_FEED", "15"))
+MAX_PUBLISH_PER_CYCLE = int(os.getenv("MAX_PUBLISH_PER_CYCLE", "6"))
+POST_DELAY_SECONDS = float(os.getenv("POST_DELAY_SECONDS", "1"))
+
+DB_PATH = os.getenv("DB_PATH", "nabz.db")
+
 
 def normalize_chat_id(value: str):
-    """
-    Converts:
-        4352824876
-    into:
-        -1004352824876
-
-    if the user entered the internal Telegram ID.
-    """
-
     if not value:
         return value
 
     try:
         number = int(value)
 
+        # Allows using the positive internal ID copied from t.me/c/...
         if number > 0:
             return int(f"-100{number}")
 
@@ -90,63 +70,50 @@ TOPIC_IDS = {
 }
 
 
-# ============================================================
-# SPEED / FRESHNESS
-# ============================================================
+# =========================================================
+# RSS SOURCES
+# =========================================================
 
-# Check feeds every 2 minutes.
-POLL_MINUTES = int(
-    os.getenv("POLL_MINUTES", "2")
-)
+FEEDS = {
+    "Iran": [
+        ("ISNA", os.getenv("RSS_ISNA", "")),
+        ("Fars", os.getenv("RSS_FARS", "")),
+        ("BBC Persian", os.getenv("RSS_BBC_PERSIAN", "")),
+        ("Iran International", os.getenv("RSS_IRAN_INTL", "")),
+    ],
 
-# Maximum age of a normal news item.
-#
-# Example:
-# News published 1 minute ago -> ACCEPT
-# News published 7 minutes ago -> ACCEPT
-# News published 60 minutes ago -> REJECT
-#
-MAX_NEWS_AGE_MINUTES = int(
-    os.getenv("MAX_NEWS_AGE_MINUTES", "10")
-)
+    "Middle East": [
+        ("Al Jazeera", os.getenv("RSS_ALJAZEERA", "")),
+        ("France 24", os.getenv("RSS_FRANCE24", "")),
+        ("BBC Middle East", os.getenv("RSS_BBC_ME", "")),
+        ("DW Middle East", os.getenv("RSS_DW_ME", "")),
+    ],
 
-# Future-dated RSS items can sometimes appear because of
-# timezone/feed errors. Allow a small clock difference.
-MAX_FUTURE_MINUTES = int(
-    os.getenv("MAX_FUTURE_MINUTES", "5")
-)
-
-# Maximum RSS entries examined per feed.
-MAX_ITEMS_PER_FEED = int(
-    os.getenv("MAX_ITEMS_PER_FEED", "15")
-)
-
-# Number of items that may be published during one polling cycle.
-MAX_PUBLISH_PER_CYCLE = int(
-    os.getenv("MAX_PUBLISH_PER_CYCLE", "6")
-)
-
-# Delay between Telegram posts.
-POST_DELAY_SECONDS = float(
-    os.getenv("POST_DELAY_SECONDS", "5")
-)
+    "World": [
+        ("The Guardian", os.getenv("RSS_GUARDIAN", "")),
+        ("BBC World", os.getenv("RSS_BBC_WORLD", "")),
+        ("France 24 World", os.getenv("RSS_FRANCE24_WORLD", "")),
+        ("DW World", os.getenv("RSS_DW_WORLD", "")),
+    ],
+}
 
 
-# ============================================================
+# =========================================================
+# GEMINI
+# =========================================================
+
+if GEMINI_API_KEY:
+    gemini = genai.Client(api_key=GEMINI_API_KEY)
+else:
+    gemini = None
+
+
+# =========================================================
 # DATABASE
-# ============================================================
+# =========================================================
 
-DB_PATH = os.getenv(
-    "DB_PATH",
-    "nabz.db"
-)
-
-
-def get_db():
-    conn = sqlite3.connect(
-        DB_PATH,
-        timeout=30
-    )
+def db():
+    conn = sqlite3.connect(DB_PATH)
 
     conn.execute(
         """
@@ -163,43 +130,21 @@ def get_db():
         """
     )
 
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_published_url
-        ON published(url)
-        """
-    )
-
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_published_title
-        ON published(title)
-        """
-    )
-
     conn.commit()
-
     return conn
 
 
-def already_published(fingerprint):
-    conn = get_db()
+def already_published(fingerprint: str) -> bool:
+    conn = db()
 
-    try:
-        result = conn.execute(
-            """
-            SELECT 1
-            FROM published
-            WHERE fingerprint = ?
-            LIMIT 1
-            """,
-            (fingerprint,)
-        ).fetchone()
+    row = conn.execute(
+        "SELECT 1 FROM published WHERE fingerprint = ? LIMIT 1",
+        (fingerprint,),
+    ).fetchone()
 
-        return result is not None
+    conn.close()
 
-    finally:
-        conn.close()
+    return row is not None
 
 
 def mark_published(
@@ -212,567 +157,255 @@ def mark_published(
     detected_at,
     telegram_message_id,
 ):
-    conn = get_db()
+    conn = db()
 
-    try:
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO published
-            (
-                fingerprint,
-                title,
-                url,
-                source,
-                category,
-                published_at,
-                detected_at,
-                telegram_message_id
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                fingerprint,
-                title,
-                url,
-                source,
-                category,
-                published_at,
-                detected_at,
-                telegram_message_id,
-            )
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO published
+        (
+            fingerprint,
+            title,
+            url,
+            source,
+            category,
+            published_at,
+            detected_at,
+            telegram_message_id
         )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            fingerprint,
+            title,
+            url,
+            source,
+            category,
+            published_at,
+            detected_at,
+            telegram_message_id,
+        ),
+    )
 
-        conn.commit()
-
-    finally:
-        conn.close()
+    conn.commit()
+    conn.close()
 
 
-# ============================================================
-# TEXT UTILITIES
-# ============================================================
+# =========================================================
+# TEXT HELPERS
+# =========================================================
 
-def clean_text(value):
-    if not value:
+def clean_text(text: str) -> str:
+    if not text:
         return ""
 
-    if isinstance(value, list):
+    text = html.unescape(text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
 
-        values = []
-
-        for item in value:
-
-            if isinstance(item, dict):
-                item = item.get("value", "")
-
-            if item:
-                values.append(str(item))
-
-        value = " ".join(values)
-
-    value = html.unescape(str(value))
-
-    value = re.sub(
-        r"<script.*?</script>",
-        " ",
-        value,
-        flags=re.I | re.S,
-    )
-
-    value = re.sub(
-        r"<style.*?</style>",
-        " ",
-        value,
-        flags=re.I | re.S,
-    )
-
-    value = re.sub(
-        r"<[^>]+>",
-        " ",
-        value,
-    )
-
-    value = re.sub(
-        r"\s+",
-        " ",
-        value,
-    )
-
-    return value.strip()
+    return text.strip()
 
 
-def extract_summary(entry):
-
-    fields = [
-        "summary",
-        "description",
-        "subtitle",
-    ]
-
-    for field in fields:
-
-        value = entry.get(field, "")
-
-        value = clean_text(value)
-
-        if value:
-            return value
-
-    content = entry.get("content", "")
-
-    if content:
-        value = clean_text(content)
-
-        if value:
-            return value
-
-    return ""
-
-
-# ============================================================
-# FINGERPRINT
-# ============================================================
-
-def make_fingerprint(title, url):
+def fingerprint(title: str, url: str) -> str:
     normalized_title = clean_text(title).lower()
+    normalized_url = url.strip().lower()
 
-    parsed = urlparse(url)
+    raw = f"{normalized_title}|{normalized_url}"
 
-    key = (
-        normalized_title
-        + "|"
-        + parsed.netloc.lower()
-        + "|"
-        + url
-    )
-
-    return hashlib.sha256(
-        key.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-# ============================================================
-# DATE PARSING
-# ============================================================
+def extract_summary(entry) -> str:
+    summary = entry.get("summary", "")
+
+    if not summary:
+        summary = entry.get("description", "")
+
+    return clean_text(summary)
+
+
+# =========================================================
+# DATE HANDLING
+# =========================================================
 
 def parse_entry_datetime(entry):
+    candidates = [
+        entry.get("published"),
+        entry.get("created"),
+        entry.get("updated"),
+    ]
 
-    # feedparser usually provides a parsed UTC structure.
-    for field in (
-        "published_parsed",
-        "updated_parsed",
-        "created_parsed",
-    ):
-
-        value = entry.get(field)
-
-        if value:
-
-            try:
-
-                timestamp = datetime(
-                    value.tm_year,
-                    value.tm_mon,
-                    value.tm_mday,
-                    value.tm_hour,
-                    value.tm_min,
-                    value.tm_sec,
-                    tzinfo=timezone.utc,
-                )
-
-                return timestamp
-
-            except Exception:
-                pass
-
-    # Fallback to textual dates.
-    for field in (
-        "published",
-        "updated",
-        "created",
-        "date",
-    ):
-
-        raw = entry.get(field)
-
-        if not raw:
+    for value in candidates:
+        if not value:
             continue
 
         try:
+            dt = parsedate_to_datetime(value)
 
-            parsed = parsedate_to_datetime(
-                raw
-            )
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
 
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(
-                    tzinfo=timezone.utc
-                )
+            return dt.astimezone(timezone.utc)
 
-            return parsed.astimezone(
-                timezone.utc
+        except Exception:
+            pass
+
+    # feedparser parsed time fallback
+    for key in ("published_parsed", "created_parsed", "updated_parsed"):
+        value = entry.get(key)
+
+        if not value:
+            continue
+
+        try:
+            from datetime import datetime as dt_datetime
+
+            return dt_datetime(
+                value.tm_year,
+                value.tm_mon,
+                value.tm_mday,
+                value.tm_hour,
+                value.tm_min,
+                value.tm_sec,
+                tzinfo=timezone.utc,
             )
 
         except Exception:
-            continue
+            pass
 
     return None
 
 
-def news_is_fresh(entry):
+def news_is_fresh(entry) -> bool:
+    published_at = parse_entry_datetime(entry)
 
-    published_at = parse_entry_datetime(
-        entry
-    )
-
-    if published_at is None:
-        logger.warning(
-            "News has no reliable publication date."
+    if not published_at:
+        logging.warning(
+            "Rejected item without reliable publication date: %s",
+            entry.get("title", ""),
         )
+        return False
 
-        # IMPORTANT:
-        # If a source doesn't provide a reliable date,
-        # we do NOT publish it automatically.
-        return False, None
+    now = datetime.now(timezone.utc)
 
-    now = datetime.now(
-        timezone.utc
-    )
+    age_seconds = (now - published_at).total_seconds()
 
-    age = (
-        now - published_at
-    ).total_seconds() / 60
+    # Reject future timestamps that are obviously wrong.
+    if age_seconds < -(MAX_FUTURE_MINUTES * 60):
+        return False
 
-    if age < -MAX_FUTURE_MINUTES:
+    # Reject old news.
+    if age_seconds > MAX_NEWS_AGE_MINUTES * 60:
+        return False
 
-        logger.warning(
-            "Future-dated news rejected: %.1f min",
-            age
-        )
-
-        return False, published_at
-
-    if age > MAX_NEWS_AGE_MINUTES:
-
-        logger.info(
-            "Old news rejected: %.1f min old",
-            age
-        )
-
-        return False, published_at
-
-    return True, published_at
+    return True
 
 
-# ============================================================
-# SOURCE CONFIGURATION
-# ============================================================
-#
-# IMPORTANT:
-# Category is based on the SUBJECT of the news,
-# not the nationality of the source.
-#
-# For example:
-# Reuters + Iran news -> Iran
-# BBC + Iran news -> Iran
-# Al Jazeera + Iran news -> Iran
-#
-# ============================================================
+# =========================================================
+# GEMINI TRANSLATION
+# =========================================================
 
-
-FEEDS = {
-
-    "Iran": [
-
-        (
-            "ISNA",
-            os.getenv(
-                "RSS_ISNA",
-                "https://www.isna.ir/rss"
-            )
-        ),
-
-        (
-            "Fars",
-            os.getenv(
-                "RSS_FARS",
-                "https://www.farsnews.ir/rss"
-            )
-        ),
-
-        (
-            "BBC Persian",
-            os.getenv(
-                "RSS_BBC_PERSIAN",
-                ""
-            )
-        ),
-
-        (
-            "Reuters Iran",
-            os.getenv(
-                "RSS_REUTERS_IRAN",
-                ""
-            )
-        ),
-
-        (
-            "AP Iran",
-            os.getenv(
-                "RSS_AP_IRAN",
-                ""
-            )
-        ),
-
-    ],
-
-    "Middle East": [
-
-        (
-            "Al Jazeera",
-            os.getenv(
-                "RSS_ALJAZEERA",
-                "https://www.aljazeera.com/xml/rss/all.xml"
-            )
-        ),
-
-        (
-            "France 24",
-            os.getenv(
-                "RSS_FRANCE24",
-                "https://www.france24.com/en/rss"
-            )
-        ),
-
-        (
-            "BBC Middle East",
-            os.getenv(
-                "RSS_BBC_MIDDLE_EAST",
-                ""
-            )
-        ),
-
-        (
-            "Reuters Middle East",
-            os.getenv(
-                "RSS_REUTERS_MIDDLE_EAST",
-                ""
-            )
-        ),
-
-        (
-            "AP Middle East",
-            os.getenv(
-                "RSS_AP_MIDDLE_EAST",
-                ""
-            )
-        ),
-
-    ],
-
-    "World": [
-
-        (
-            "The Guardian",
-            os.getenv(
-                "RSS_GUARDIAN",
-                "https://www.theguardian.com/world/rss"
-            )
-        ),
-
-        (
-            "France 24",
-            os.getenv(
-                "RSS_FRANCE24_WORLD",
-                "https://www.france24.com/en/rss"
-            )
-        ),
-
-        (
-            "Reuters World",
-            os.getenv(
-                "RSS_REUTERS_WORLD",
-                ""
-            )
-        ),
-
-        (
-            "AP World",
-            os.getenv(
-                "RSS_AP_WORLD",
-                ""
-            )
-        ),
-
-        (
-            "BBC World",
-            os.getenv(
-                "RSS_BBC_WORLD",
-                ""
-            )
-        ),
-
-    ],
-}
-
-
-# ============================================================
-# DISABLED EMPTY FEEDS
-# ============================================================
-
-def valid_feeds():
-
-    result = {}
-
-    for category, sources in FEEDS.items():
-
-        result[category] = []
-
-        for source, url in sources:
-
-            if not url:
-                continue
-
-            result[category].append(
-                (source, url)
-            )
-
-    return result
-
-
-# ============================================================
-# TOPIC CLASSIFICATION
-# ============================================================
-
-IRAN_KEYWORDS = [
-    "iran",
-    "iranian",
-    "tehran",
-    "persian",
-    "ایران",
-    "ایرانی",
-    "تهران",
-    "فارس",
-]
-
-MIDDLE_EAST_KEYWORDS = [
-    "israel",
-    "palestine",
-    "gaza",
-    "lebanon",
-    "syria",
-    "iraq",
-    "yemen",
-    "jordan",
-    "saudi",
-    "qatar",
-    "bahrain",
-    "kuwait",
-    "uae",
-    "emirates",
-    "middle east",
-    "اسرائیل",
-    "فلسطین",
-    "غزه",
-    "لبنان",
-    "سوریه",
-    "عراق",
-    "یمن",
-    "اردن",
-    "عربستان",
-    "قطر",
-    "بحرین",
-    "کویت",
-    "امارات",
-    "خاورمیانه",
-]
-
-
-def classify_category(
-    title,
-    summary,
-    default_category
-):
-
-    text = (
-        clean_text(title)
-        + " "
-        + clean_text(summary)
-    ).lower()
-
-    # Iran gets first priority.
-    for keyword in IRAN_KEYWORDS:
-
-        if keyword.lower() in text:
-            return "Iran"
-
-    # Then Middle East.
-    for keyword in MIDDLE_EAST_KEYWORDS:
-
-        if keyword.lower() in text:
-            return "Middle East"
-
-    # Otherwise use source's default category.
-    return default_category
-
-
-# ============================================================
-# TRANSLATION PLACEHOLDER
-# ============================================================
-#
-# This function is intentionally separated.
-#
-# We can connect OpenAI / another translation provider here
-# without touching the RSS/Telegram system.
-#
-# Until an API key is configured, the original text is used.
-#
-# ============================================================
-
-async def translate_to_persian(text):
-
-    text = clean_text(text)
-
+async def translate_to_persian(text: str) -> str:
     if not text:
         return ""
 
-    # --------------------------------------------------------
-    # AI translation will be connected here.
-    # --------------------------------------------------------
-    #
-    # For now:
-    # Return the source text unchanged.
-    #
-    # IMPORTANT:
-    # Do NOT pretend this is a translation.
-    #
-    # --------------------------------------------------------
+    if not gemini:
+        raise RuntimeError("GEMINI_API_KEY is not configured.")
 
-    return text
+    prompt = f"""
+Translate the following news text into natural, professional Persian.
+
+Rules:
+- Translate only.
+- Do NOT summarize.
+- Do NOT add information.
+- Do NOT remove important information.
+- Preserve names, organizations, places, numbers and dates accurately.
+- Keep the meaning and tone of the original.
+- Do not add an introduction such as "ترجمه:".
+- Return only the Persian translation.
+
+Text:
+{text}
+"""
+
+    try:
+        response = await asyncio.to_thread(
+            gemini.models.generate_content,
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
+
+        result = (response.text or "").strip()
+
+        if not result:
+            raise RuntimeError("Gemini returned an empty translation.")
+
+        return result
+
+    except Exception:
+        logging.exception("Gemini translation failed.")
+        raise
 
 
-async def make_persian_content(
-    title,
-    summary
-):
+async def translate_article(title: str, summary: str):
+    translated_title = await translate_to_persian(title)
 
-    translated_title = await translate_to_persian(
-        title
-    )
+    translated_summary = ""
 
-    translated_summary = await translate_to_persian(
-        summary
-    )
+    if summary:
+        translated_summary = await translate_to_persian(summary)
 
-    return (
-        translated_title,
-        translated_summary
-    )
+    return translated_title, translated_summary
 
 
-# ============================================================
-# MESSAGE BUILDER
-# ============================================================
+# =========================================================
+# CATEGORY
+# =========================================================
+
+def classify_category(title: str, summary: str, default_category: str) -> str:
+    text = f"{title} {summary}".lower()
+
+    iran_keywords = [
+        "iran",
+        "iranian",
+        "tehran",
+        "ایران",
+        "ایرانی",
+        "تهران",
+    ]
+
+    middle_east_keywords = [
+        "israel",
+        "palestine",
+        "gaza",
+        "lebanon",
+        "syria",
+        "iraq",
+        "yemen",
+        "saudi",
+        "israel",
+        "فلسطین",
+        "غزه",
+        "لبنان",
+        "سوریه",
+        "عراق",
+        "یمن",
+        "عربستان",
+        "اسرائیل",
+    ]
+
+    if any(word in text for word in iran_keywords):
+        return "Iran"
+
+    if any(word in text for word in middle_east_keywords):
+        return "Middle East"
+
+    return default_category
+
+
+# =========================================================
+# MESSAGE
+# =========================================================
 
 def build_message(
     category,
@@ -782,502 +415,296 @@ def build_message(
     url,
     published_at,
 ):
+    icons = {
+        "Iran": "🇮🇷",
+        "Middle East": "🌍",
+        "World": "🌐",
+    }
 
-    if category == "Iran":
-        icon = "🇮🇷"
+    icon = icons.get(category, "📰")
 
-    elif category == "Middle East":
-        icon = "🌍"
+    safe_title = html.escape(title)
+    safe_summary = html.escape(summary)
+    safe_source = html.escape(source)
+    safe_url = html.escape(url, quote=True)
 
-    else:
-        icon = "🌐"
+    lines = [
+        f"{icon} <b>{safe_title}</b>",
+    ]
 
-    parts = []
-
-    parts.append(
-        f"{icon} <b>{html.escape(category)}</b>"
-    )
-
-    parts.append("")
-
-    parts.append(
-        f"<b>{html.escape(title)}</b>"
-    )
-
-    if summary:
-
-        parts.append("")
-
-        if len(summary) > 900:
-
-            summary = (
-                summary[:897]
-                .rsplit(" ", 1)[0]
-                + "..."
-            )
-
-        parts.append(
-            html.escape(summary)
+    if safe_summary:
+        lines.extend(
+            [
+                "",
+                safe_summary,
+            ]
         )
 
-    parts.append("")
-
-    parts.append(
-        f"📰 <b>منبع:</b> "
-        f"{html.escape(source)}"
+    lines.extend(
+        [
+            "",
+            f"📰 منبع: {safe_source}",
+            f"🕒 زمان انتشار: {published_at.strftime('%Y-%m-%d %H:%M UTC')}",
+            "",
+            f"🔗 <a href=\"{safe_url}\">مشاهده خبر اصلی</a>",
+        ]
     )
 
-    if published_at:
-
-        published_text = (
-            published_at
-            .astimezone()
-            .strftime("%H:%M")
-        )
-
-        parts.append(
-            f"🕐 <b>زمان انتشار:</b> "
-            f"{published_text}"
-        )
-
-    parts.append("")
-
-    parts.append(
-        f'🔗 <a href="{html.escape(url, quote=True)}">'
-        f"مشاهده گزارش اصلی"
-        f"</a>"
-    )
-
-    parts.append("")
-
-    parts.append(
-        f"#{category.replace(' ', '_')}"
-    )
-
-    return "\n".join(parts)
+    return "\n".join(lines)
 
 
-# ============================================================
-# FETCH ONE FEED
-# ============================================================
+# =========================================================
+# FETCH
+# =========================================================
 
-async def fetch_feed(
-    category,
-    source,
-    feed_url
-):
+async def fetch_feed(category, source, feed_url):
+    if not feed_url:
+        return []
 
     try:
-
-        logger.info(
-            "Checking: %s | %s",
-            source,
-            feed_url
-        )
-
         parsed = await asyncio.to_thread(
             feedparser.parse,
-            feed_url
+            feed_url,
         )
 
-        if getattr(
-            parsed,
-            "bozo",
-            False
-        ):
-
-            logger.warning(
-                "Feed warning: %s",
-                source
-            )
-
-        entries = list(
-            parsed.entries[:MAX_ITEMS_PER_FEED]
-        )
-
-        logger.info(
-            "%s -> %d entries",
-            source,
-            len(entries)
-        )
+        entries = parsed.entries[:MAX_ITEMS_PER_FEED]
 
         return [
-            (
-                category,
-                source,
-                entry
-            )
+            (category, source, entry)
             for entry in entries
         ]
 
     except Exception:
-
-        logger.exception(
+        logging.exception(
             "Feed failed: %s",
-            source
+            source,
         )
-
         return []
 
 
-# ============================================================
-# PUBLISH ONE NEWS ITEM
-# ============================================================
+# =========================================================
+# PUBLISH
+# =========================================================
 
 async def publish_item(
     bot,
     category,
     source,
-    entry
+    entry,
 ):
+    url = entry.get("link", "").strip()
+    original_title = clean_text(entry.get("title", ""))
+    original_summary = extract_summary(entry)
 
-    url = clean_text(
-        entry.get(
-            "link",
-            ""
-        )
-    )
-
-    title = clean_text(
-        entry.get(
-            "title",
-            ""
-        )
-    )
-
-    summary = extract_summary(
-        entry
-    )
-
-    if not url or not title:
-
+    if not url or not original_title:
         return False
 
-    # --------------------------------------------------------
-    # FRESHNESS CHECK
-    # --------------------------------------------------------
-
-    fresh, published_at = news_is_fresh(
-        entry
-    )
-
-    if not fresh:
-
+    # Never publish old news.
+    if not news_is_fresh(entry):
         return False
 
-    # --------------------------------------------------------
-    # CLASSIFICATION
-    # --------------------------------------------------------
-
-    final_category = classify_category(
-        title,
-        summary,
-        category
-    )
-
-    topic_id = TOPIC_IDS.get(
-        final_category,
-        0
-    )
-
-    if not topic_id:
-
-        logger.warning(
-            "Topic missing: %s",
-            final_category
-        )
-
-        return False
-
-    # --------------------------------------------------------
-    # DUPLICATE CHECK
-    # --------------------------------------------------------
-
-    fp = make_fingerprint(
-        title,
-        url
+    fp = fingerprint(
+        original_title,
+        url,
     )
 
     if already_published(fp):
-
-        logger.info(
-            "Duplicate skipped: %s",
-            title
-        )
-
         return False
 
-    # --------------------------------------------------------
-    # TRANSLATION
-    # --------------------------------------------------------
+    published_at = parse_entry_datetime(entry)
 
-    (
-        translated_title,
-        translated_summary
-    ) = await make_persian_content(
-        title,
-        summary
+    if not published_at:
+        return False
+
+    # Determine topic before translation.
+    category = classify_category(
+        original_title,
+        original_summary,
+        category,
     )
 
-    # --------------------------------------------------------
-    # MESSAGE
-    # --------------------------------------------------------
+    topic_id = TOPIC_IDS.get(category, 0)
+
+    if not topic_id:
+        logging.warning(
+            "Topic ID missing for category: %s",
+            category,
+        )
+        return False
+
+    # Translate title + existing RSS description.
+    translated_title, translated_summary = await translate_article(
+        original_title,
+        original_summary,
+    )
+
+    detected_at = datetime.now(timezone.utc)
+
+    latency = (
+        detected_at - published_at
+    ).total_seconds()
+
+    logging.info(
+        "News detected | source=%s | latency=%ss | title=%s",
+        source,
+        round(latency, 1),
+        original_title,
+    )
 
     message = build_message(
-        final_category,
+        category=category,
+        source=source,
+        title=translated_title,
+        summary=translated_summary,
+        url=url,
+        published_at=published_at,
+    )
+
+    sent = await bot.send_message(
+        chat_id=CHAT_ID,
+        message_thread_id=topic_id,
+        text=message,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=False,
+    )
+
+    mark_published(
+        fingerprint=fp,
+        title=original_title,
+        url=url,
+        source=source,
+        category=category,
+        published_at=published_at.isoformat(),
+        detected_at=detected_at.isoformat(),
+        telegram_message_id=sent.message_id,
+    )
+
+    logging.info(
+        "Published [%s] [%s] %s",
+        category,
         source,
         translated_title,
-        translated_summary,
-        url,
-        published_at,
     )
 
-    # --------------------------------------------------------
-    # SEND
-    # --------------------------------------------------------
-
-    try:
-
-        sent = await bot.send_message(
-            chat_id=CHAT_ID,
-            message_thread_id=topic_id,
-            text=message,
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=False,
-        )
-
-        detected_at = datetime.now(
-            timezone.utc
-        ).isoformat()
-
-        mark_published(
-            fingerprint=fp,
-            title=title,
-            url=url,
-            source=source,
-            category=final_category,
-            published_at=(
-                published_at.isoformat()
-                if published_at
-                else ""
-            ),
-            detected_at=detected_at,
-            telegram_message_id=sent.message_id,
-        )
-
-        logger.info(
-            "PUBLISHED [%s] [%s] %s",
-            final_category,
-            source,
-            title
-        )
-
-        return True
-
-    except Exception:
-
-        logger.exception(
-            "Telegram publish failed: %s",
-            title
-        )
-
-        return False
+    return True
 
 
-# ============================================================
-# POLL
-# ============================================================
+# =========================================================
+# POLLING
+# =========================================================
 
 async def poll():
-
     if not BOT_TOKEN:
-        raise RuntimeError(
-            "BOT_TOKEN is missing."
-        )
+        raise RuntimeError("BOT_TOKEN is missing.")
 
     if not CHAT_ID:
-        raise RuntimeError(
-            "GROUP_CHAT_ID is missing."
-        )
+        raise RuntimeError("GROUP_CHAT_ID is missing.")
 
-    bot = Bot(
-        token=BOT_TOKEN
-    )
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is missing.")
 
-    sources = valid_feeds()
+    bot = Bot(BOT_TOKEN)
 
     tasks = []
 
-    for category, feeds in sources.items():
+    for category, sources in FEEDS.items():
+        for source, feed_url in sources:
 
-        for source, url in feeds:
+            if not feed_url:
+                continue
 
             tasks.append(
                 fetch_feed(
                     category,
                     source,
-                    url
+                    feed_url,
                 )
             )
 
-    if not tasks:
-
-        logger.warning(
-            "No RSS feeds configured."
-        )
-
-        return
-
     batches = await asyncio.gather(
         *tasks,
-        return_exceptions=True
+        return_exceptions=True,
     )
 
-    # --------------------------------------------------------
-    # Collect all news.
-    # --------------------------------------------------------
-
-    all_items = []
+    candidates = []
 
     for batch in batches:
-
-        if isinstance(
-            batch,
-            Exception
-        ):
-
-            logger.error(
-                "Feed batch error: %s",
-                batch
+        if isinstance(batch, Exception):
+            logging.exception(
+                "Feed batch failed",
+                exc_info=batch,
             )
-
             continue
 
-        all_items.extend(
-            batch
-        )
+        candidates.extend(batch)
 
-    # --------------------------------------------------------
-    # Sort newest first.
-    # --------------------------------------------------------
-
-    def sort_key(item):
-
-        try:
-
-            entry = item[2]
-
-            date = parse_entry_datetime(
-                entry
-            )
-
-            if date:
-                return date.timestamp()
-
-        except Exception:
-            pass
-
-        return 0
-
-    all_items.sort(
-        key=sort_key,
-        reverse=True
+    # Newest first.
+    candidates.sort(
+        key=lambda item: (
+            parse_entry_datetime(item[2])
+            or datetime.min.replace(tzinfo=timezone.utc)
+        ),
+        reverse=True,
     )
-
-    # --------------------------------------------------------
-    # Publish only a controlled number per cycle.
-    # --------------------------------------------------------
 
     published_count = 0
 
-    for (
-        category,
-        source,
-        entry
-    ) in all_items:
+    for category, source, entry in candidates:
 
-        if (
-            published_count
-            >= MAX_PUBLISH_PER_CYCLE
-        ):
+        if published_count >= MAX_PUBLISH_PER_CYCLE:
             break
 
         try:
-
             published = await publish_item(
                 bot,
                 category,
                 source,
-                entry
+                entry,
             )
 
             if published:
-
                 published_count += 1
 
-                await asyncio.sleep(
-                    POST_DELAY_SECONDS
-                )
+                if POST_DELAY_SECONDS > 0:
+                    await asyncio.sleep(
+                        POST_DELAY_SECONDS
+                    )
 
         except Exception:
-
-            logger.exception(
-                "Unexpected item error."
+            logging.exception(
+                "Failed publishing item from %s",
+                source,
             )
 
-    logger.info(
-        "Cycle complete. Published: %d",
-        published_count
+    logging.info(
+        "Polling finished. Published=%s",
+        published_count,
     )
 
 
-# ============================================================
+# =========================================================
 # MAIN
-# ============================================================
+# =========================================================
 
 async def main():
-
     if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN is missing.")
 
-        raise RuntimeError(
-            "BOT_TOKEN is missing."
-        )
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is missing.")
 
-    bot = Bot(
-        token=BOT_TOKEN
-    )
-
-    # --------------------------------------------------------
-    # Verify Telegram connection.
-    # --------------------------------------------------------
+    bot = Bot(BOT_TOKEN)
 
     me = await bot.get_me()
 
-    logger.info(
-        "Authenticated as @%s",
-        me.username
+    logging.info(
+        "Bot authenticated: @%s",
+        me.username,
     )
 
-    # --------------------------------------------------------
-    # RUN_ONCE mode
-    # --------------------------------------------------------
-
-    if os.getenv(
-        "RUN_ONCE",
-        "0"
-    ).strip() == "1":
-
-        logger.info(
-            "RUN_ONCE enabled."
-        )
-
+    if os.getenv("RUN_ONCE", "0").strip() == "1":
         await poll()
-
         return
-
-    # --------------------------------------------------------
-    # Scheduler
-    # --------------------------------------------------------
 
     scheduler = AsyncIOScheduler()
 
@@ -1291,47 +718,10 @@ async def main():
 
     scheduler.start()
 
-    logger.info(
-        "Nabz started."
-    )
-
-    logger.info(
-        "Polling interval: %d minutes",
-        POLL_MINUTES
-    )
-
-    logger.info(
-        "Maximum news age: %d minutes",
-        MAX_NEWS_AGE_MINUTES
-    )
-
-    # --------------------------------------------------------
-    # First scan immediately.
-    # --------------------------------------------------------
-
     await poll()
-
-    # --------------------------------------------------------
-    # Keep process alive.
-    # --------------------------------------------------------
 
     await asyncio.Event().wait()
 
 
-# ============================================================
-# ENTRY POINT
-# ============================================================
-
 if __name__ == "__main__":
-
-    try:
-
-        asyncio.run(
-            main()
-        )
-
-    except KeyboardInterrupt:
-
-        logger.info(
-            "Nabz stopped."
-        )
+    asyncio.run(main())
