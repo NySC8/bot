@@ -1,0 +1,5 @@
+[
+  "tests/test_core.py::test_clean_text",
+  "tests/test_core.py::test_fingerprint_stable",
+  "tests/test_core.py::test_message_contains_source_and_link"
+]
