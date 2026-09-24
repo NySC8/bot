@@ -19,6 +19,20 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 GROUP_CHAT_ID = os.getenv("GROUP_CHAT_ID", "").strip()
+# Telegram Bot API group/supergroup IDs are negative. If the value came from a t.me/c/... link,
+# convert the positive internal ID to the Bot API form automatically.
+def normalize_chat_id(value: str):
+    if not value:
+        return value
+    try:
+        n = int(value)
+        if n > 0:
+            return int(f"-100{n}")
+        return n
+    except ValueError:
+        return value
+
+CHAT_ID = normalize_chat_id(GROUP_CHAT_ID)
 POLL_MINUTES = int(os.getenv("POLL_MINUTES", "10"))
 MAX_ITEMS_PER_FEED = int(os.getenv("MAX_ITEMS_PER_FEED", "8"))
 
@@ -89,7 +103,7 @@ async def publish_item(bot, category, source, entry):
 
     message = build_message(category, source, title, extract_summary(entry), url)
     await bot.send_message(
-        chat_id=GROUP_CHAT_ID,
+        chat_id=CHAT_ID,
         message_thread_id=topic_id,
         text=message,
         parse_mode=ParseMode.HTML,
@@ -99,7 +113,7 @@ async def publish_item(bot, category, source, entry):
     logging.info("Published [%s] %s", category, title)
 
 async def poll():
-    if not BOT_TOKEN or not GROUP_CHAT_ID:
+    if not BOT_TOKEN or not CHAT_ID:
         raise RuntimeError("BOT_TOKEN and GROUP_CHAT_ID must be configured.")
 
     bot = Bot(BOT_TOKEN)
@@ -122,6 +136,10 @@ async def main():
     bot = Bot(BOT_TOKEN)
     me = await bot.get_me()
     logging.info("Bot authenticated: @%s", me.username)
+
+    if os.getenv("RUN_ONCE", "0").strip() == "1":
+        await poll()
+        return
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(poll, "interval", minutes=POLL_MINUTES, max_instances=1)
