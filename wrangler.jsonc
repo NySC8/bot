@@ -23,6 +23,7 @@
 
   "vars": {
     "GROUP_CHAT_ID": "-1004352824876",
+
     "TOPIC_IRAN": "3",
     "TOPIC_MIDDLE_EAST": "4",
     "TOPIC_WORLD": "5",
