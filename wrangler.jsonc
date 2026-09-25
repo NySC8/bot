@@ -16,11 +16,13 @@
     }
   ],
 
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
+
   "vars": {
-    "GEMINI_MODEL": "gemini-3.8-flash",
-
     "GROUP_CHAT_ID": "-1004352824876",
-
     "TOPIC_IRAN": "3",
     "TOPIC_MIDDLE_EAST": "4",
     "TOPIC_WORLD": "5",
