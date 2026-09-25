@@ -4,140 +4,267 @@ const FEEDS = [
   // IRAN
   // =========================
 
-  { name:"BBC Persian", category:"iran", url:"https://feeds.bbci.co.uk/persian/rss.xml" },
+  {
+    name: "BBC Persian",
+    category: "iran",
+    url: "https://feeds.bbci.co.uk/persian/rss.xml"
+  },
 
-  { name:"Iran International", category:"iran",
-    url:"https://news.google.com/rss/search?q=site%3Airanintl.com+when%3A1h&hl=en-US&gl=US&ceid=US%3Aen" },
+  {
+    name: "Iran International",
+    category: "iran",
+    url: "https://news.google.com/rss/search?q=site%3Airanintl.com+when%3A1h&hl=en-US&gl=US&ceid=US%3Aen"
+  },
 
-  { name:"Radio Farda", category:"iran",
-    url:"https://www.radiofarda.com/api/z-pqpiev-qpp" },
+  {
+    name: "Radio Farda",
+    category: "iran",
+    url: "https://www.radiofarda.com/api/z-pqpiev-qpp"
+  },
 
-  { name:"DW Farsi", category:"iran",
-    url:"https://rss.dw.com/xml/rss-fa-all" },
+  {
+    name: "DW Farsi",
+    category: "iran",
+    url: "https://rss.dw.com/xml/rss-fa-all"
+  },
 
-  { name:"ISNA", category:"iran",
-    url:"https://www.isna.ir/rss" },
+  {
+    name: "ISNA",
+    category: "iran",
+    url: "https://www.isna.ir/rss"
+  },
 
-  { name:"Tasnim", category:"iran",
-    url:"https://www.tasnimnews.com/fa/rss/feed/0/8/0/%D9%85%D9%87%D9%85%D8%AA%D8%B1%DB%8C%D9%86-%D8%A7%D8%AE%D8%A8%D8%A7%D8%B1-%D8%AA%D8%B3%D9%86%DB%8C%D9%85" },
+  {
+    name: "Tasnim",
+    category: "iran",
+    url: "https://www.tasnimnews.com/fa/rss/feed/0/8/0/%D9%85%D9%87%D9%85%D8%AA%D8%B1%DB%8C%D9%86-%D8%AE%D8%A8%D8%A7%D8%B1-%D8%AA%D8%B3%D9%86%DB%8C%D9%85"
+  },
 
-  { name:"Tabnak", category:"iran",
-    url:"https://www.tabnak.ir/fa/rss/allnews" },
+  {
+    name: "Tabnak",
+    category: "iran",
+    url: "https://www.tabnak.ir/fa/rss/allnews"
+  },
 
-  { name:"Mehr", category:"iran",
-    url:"https://www.mehrnews.com/rss" },
+  {
+    name: "Mehr",
+    category: "iran",
+    url: "https://www.mehrnews.com/rss"
+  },
 
-  { name:"Khabar Online", category:"iran",
-    url:"https://www.khabaronline.ir/rss" },
+  {
+    name: "Khabar Online",
+    category: "iran",
+    url: "https://www.khabaronline.ir/rss"
+  },
 
-  { name:"YJC", category:"iran",
-    url:"https://www.yjc.ir/fa/rss/allnews" },
+  {
+    name: "YJC",
+    category: "iran",
+    url: "https://www.yjc.ir/fa/rss/allnews"
+  },
 
-  { name:"Asriran", category:"iran",
-    url:"https://www.asriran.com/fa/rss/allnews" },
+  {
+    name: "Asriran",
+    category: "iran",
+    url: "https://www.asriran.com/fa/rss/allnews"
+  },
 
-  { name:"Fars", category:"iran",
-    url:"https://news.google.com/rss/search?q=site%3Afarsnews.ir+when%3A1h&hl=en-US&gl=US&ceid=US%3Aen" },
+  {
+    name: "Fars",
+    category: "iran",
+    url: "https://news.google.com/rss/search?q=site%3Afarsnews.ir+when%3A1h&hl=en-US&gl=US&ceid=US%3Aen"
+  },
 
-  { name:"IRNA", category:"iran",
-    url:"https://en.irna.ir/rss" },
+  {
+    name: "IRNA",
+    category: "iran",
+    url: "https://en.irna.ir/rss"
+  },
 
-  { name:"ILNA", category:"iran",
-    url:"https://news.google.com/rss/search?q=site%3Ailna.ir+when%3A1h&hl=en-US&gl=US&ceid=US%3Aen" },
+  {
+    name: "ILNA",
+    category: "iran",
+    url: "https://news.google.com/rss/search?q=site%3Ailna.ir+when%3A1h&hl=en-US&gl=US&ceid=US%3Aen"
+  },
 
-  { name:"France 24", category:"iran",
-    url:"https://www.france24.com/en/rss" },
+  {
+    name: "France 24",
+    category: "iran",
+    url: "https://www.france24.com/en/rss"
+  },
 
 
   // =========================
   // MIDDLE EAST
   // =========================
 
-  { name:"Al Jazeera", category:"middle_east",
-    url:"https://www.aljazeera.com/xml/rss/all.xml" },
+  {
+    name: "Al Jazeera",
+    category: "middle_east",
+    url: "https://www.aljazeera.com/xml/rss/all.xml"
+  },
 
-  { name:"BBC Middle East", category:"middle_east",
-    url:"https://feeds.bbci.co.uk/news/world/middle_east/rss.xml" },
+  {
+    name: "BBC Middle East",
+    category: "middle_east",
+    url: "https://feeds.bbci.co.uk/news/world/middle_east/rss.xml"
+  },
 
-  { name:"The Guardian", category:"middle_east",
-    url:"https://www.theguardian.com/world/middleeast/rss" },
+  {
+    name: "The Guardian",
+    category: "middle_east",
+    url: "https://www.theguardian.com/world/middleeast/rss"
+  },
 
-  { name:"The New York Times", category:"middle_east",
-    url:"https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml" },
+  {
+    name: "The New York Times",
+    category: "middle_east",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml"
+  },
 
-  { name:"CNN", category:"middle_east",
-    url:"http://rss.cnn.com/rss/edition_meast.rss" },
+  {
+    name: "CNN",
+    category: "middle_east",
+    url: "http://rss.cnn.com/rss/edition_meast.rss"
+  },
 
-  { name:"Fox News", category:"middle_east",
-    url:"https://moxie.foxnews.com/google-publisher/world.xml" },
+  {
+    name: "Fox News",
+    category: "middle_east",
+    url: "https://moxie.foxnews.com/google-publisher/world.xml"
+  },
 
-  { name:"The Washington Post", category:"middle_east",
-    url:"https://feeds.washingtonpost.com/rss/world" },
+  {
+    name: "The Washington Post",
+    category: "middle_east",
+    url: "https://feeds.washingtonpost.com/rss/world"
+  },
 
-  { name:"The National", category:"middle_east",
-    url:"https://www.thenationalnews.com/rss" },
+  {
+    name: "The National",
+    category: "middle_east",
+    url: "https://www.thenationalnews.com/rss"
+  },
 
-  { name:"France 24", category:"middle_east",
-    url:"https://www.france24.com/en/rss" },
+  {
+    name: "France 24",
+    category: "middle_east",
+    url: "https://www.france24.com/en/rss"
+  },
 
-  { name:"DW", category:"middle_east",
-    url:"https://rss.dw.com/xml/rss-en-all" },
+  {
+    name: "DW",
+    category: "middle_east",
+    url: "https://rss.dw.com/xml/rss-en-all"
+  },
 
-  { name:"Euronews", category:"middle_east",
-    url:"https://www.euronews.com/rss" },
+  {
+    name: "Euronews",
+    category: "middle_east",
+    url: "https://www.euronews.com/rss"
+  },
 
 
   // =========================
   // WORLD
   // =========================
 
-  { name:"BBC World", category:"world",
-    url:"https://feeds.bbci.co.uk/news/world/rss.xml" },
+  {
+    name: "BBC World",
+    category: "world",
+    url: "https://feeds.bbci.co.uk/news/world/rss.xml"
+  },
 
-  { name:"The Guardian", category:"world",
-    url:"https://www.theguardian.com/world/rss" },
+  {
+    name: "The Guardian",
+    category: "world",
+    url: "https://www.theguardian.com/world/rss"
+  },
 
-  { name:"The New York Times", category:"world",
-    url:"https://rss.nytimes.com/services/xml/rss/nyt/World.xml" },
+  {
+    name: "The New York Times",
+    category: "world",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
+  },
 
-  { name:"CNN", category:"world",
-    url:"http://rss.cnn.com/rss/edition.rss" },
+  {
+    name: "CNN",
+    category: "world",
+    url: "http://rss.cnn.com/rss/edition.rss"
+  },
 
-  { name:"Fox News", category:"world",
-    url:"https://moxie.foxnews.com/google-publisher/latest.xml" },
+  {
+    name: "Fox News",
+    category: "world",
+    url: "https://moxie.foxnews.com/google-publisher/latest.xml"
+  },
 
-  { name:"The Washington Post", category:"world",
-    url:"https://feeds.washingtonpost.com/rss/world" },
+  {
+    name: "The Washington Post",
+    category: "world",
+    url: "https://feeds.washingtonpost.com/rss/world"
+  },
 
-  { name:"DW", category:"world",
-    url:"https://rss.dw.com/xml/rss-en-all" },
+  {
+    name: "DW",
+    category: "world",
+    url: "https://rss.dw.com/xml/rss-en-all"
+  },
 
-  { name:"France 24", category:"world",
-    url:"https://www.france24.com/en/rss" },
+  {
+    name: "France 24",
+    category: "world",
+    url: "https://www.france24.com/en/rss"
+  },
 
-  { name:"Euronews", category:"world",
-    url:"https://www.euronews.com/rss" },
+  {
+    name: "Euronews",
+    category: "world",
+    url: "https://www.euronews.com/rss"
+  },
 
-  { name:"TASS", category:"world",
-    url:"https://tass.com/rss/v2.xml" },
+  {
+    name: "TASS",
+    category: "world",
+    url: "https://tass.com/rss/v2.xml"
+  },
 
-  { name:"RIA Novosti", category:"world",
-    url:"https://ria.ru/export/rss2/archive/index.xml" },
+  {
+    name: "RIA Novosti",
+    category: "world",
+    url: "https://ria.ru/export/rss2/archive/index.xml"
+  },
 
-  { name:"Sputnik", category:"world",
-    url:"https://sputnikglobe.com/export/rss2/archive/index.xml" },
+  {
+    name: "Sputnik",
+    category: "world",
+    url: "https://sputnikglobe.com/export/rss2/archive/index.xml"
+  },
 
-  { name:"RT", category:"world",
-    url:"https://www.rt.com/rss/" },
+  {
+    name: "RT",
+    category: "world",
+    url: "https://www.rt.com/rss/"
+  },
 
-  { name:"ANSA", category:"world",
-    url:"https://www.ansa.it/sito/ansait_rss.xml" },
+  {
+    name: "ANSA",
+    category: "world",
+    url: "https://www.ansa.it/sito/ansait_rss.xml"
+  },
 
-  { name:"Politico Europe", category:"world",
-    url:"https://www.politico.eu/feed/" },
+  {
+    name: "Politico Europe",
+    category: "world",
+    url: "https://www.politico.eu/feed/"
+  },
 
-  { name:"Al Jazeera", category:"world",
-    url:"https://www.aljazeera.com/xml/rss/all.xml" }
+  {
+    name: "Al Jazeera",
+    category: "world",
+    url: "https://www.aljazeera.com/xml/rss/all.xml"
+  }
 
 ];
 
@@ -148,7 +275,8 @@ const ADMIN_USERNAME = "clearviolet";
 const MIN_AGE = 2 * 60 * 1000;
 const MAX_AGE = 5 * 60 * 1000;
 
-const DEFAULT_MODEL = "gemini-3.8-flash";
+const TRANSLATION_MODEL =
+  "@cf/meta/m2m100-1.2b";
 
 
 // =========================
@@ -161,19 +289,24 @@ export default {
 
     try {
 
-      const u = new URL(request.url);
+      const u =
+        new URL(request.url);
 
       if (
         request.method === "POST" &&
         u.pathname === "/telegram"
       ) {
+
         return await handleTelegram(
           request,
           env
         );
       }
 
-      if (request.method === "GET") {
+      if (
+        request.method === "GET"
+      ) {
+
         return new Response(
           "Nabz is running."
         );
@@ -181,25 +314,34 @@ export default {
 
       return new Response(
         "Method Not Allowed",
-        { status: 405 }
+        {
+          status: 405
+        }
       );
 
     } catch (e) {
 
       console.error(
         "FETCH_ERROR",
-        e?.stack || String(e)
+        e?.stack ||
+        String(e)
       );
 
       return new Response(
         "Internal error",
-        { status: 500 }
+        {
+          status: 500
+        }
       );
     }
   },
 
 
-  async scheduled(event, env, ctx) {
+  async scheduled(
+    event,
+    env,
+    ctx
+  ) {
 
     ctx.waitUntil(
       run(env)
@@ -218,7 +360,9 @@ async function run(env) {
   const started =
     new Date();
 
+
   await initStats(env);
+
 
   await put(
     env,
@@ -228,15 +372,19 @@ async function run(env) {
 
 
   /*
-   * هر دقیقه فقط یک سوم منابع بررسی می‌شود
-   * تا تعداد subrequest ها پایین بماند.
+   * هر دقیقه یک سوم منابع
+   * بررسی می‌شود.
    */
 
   const minute =
-    Math.floor(Date.now() / 60000);
+    Math.floor(
+      Date.now() / 60000
+    );
+
 
   const group =
     minute % 3;
+
 
   const feeds =
     FEEDS.filter(
@@ -248,7 +396,8 @@ async function run(env) {
   console.log(
     "FEED_GROUP",
     group,
-    "count=" + feeds.length
+    "count=" +
+    feeds.length
   );
 
 
@@ -289,6 +438,7 @@ async function run(env) {
         ...result.value
       );
 
+
       console.log(
         "RSS_OK",
         feeds[i].name,
@@ -298,6 +448,7 @@ async function run(env) {
     } else {
 
       fail++;
+
 
       console.error(
         "RSS_ERROR",
@@ -336,7 +487,8 @@ async function run(env) {
 
   const max =
     Number(
-      env.MAX_PUBLISH_PER_RUN || 3
+      env.MAX_PUBLISH_PER_RUN ||
+      3
     );
 
 
@@ -350,6 +502,7 @@ async function run(env) {
     if (
       sent >= max
     ) {
+
       break;
     }
 
@@ -366,12 +519,13 @@ async function run(env) {
     if (
       await env.SEEN.get(key)
     ) {
+
       continue;
     }
 
 
     /*
-     * رزرو موقت خبر
+     * رزرو خبر
      */
 
     await env.SEEN.put(
@@ -405,13 +559,13 @@ async function run(env) {
 
 
       console.log(
-        "GEMINI_OK",
+        "TRANSLATION_OK",
         item.feedName
       );
 
 
       /*
-       * ارسال Telegram
+       * ارسال تلگرام
        */
 
       const telegram =
@@ -507,6 +661,7 @@ async function run(env) {
       console.log(
         "PUBLISHED",
         JSON.stringify({
+
           source:
             item.feedName,
 
@@ -518,6 +673,7 @@ async function run(env) {
 
           latencySeconds:
             latency
+
         })
       );
 
@@ -533,7 +689,7 @@ async function run(env) {
 
 
       /*
-       * اگر ارسال موفق نشد
+       * اگر ارسال شکست خورد،
        * خبر دوباره قابل پردازش باشد.
        */
 
@@ -547,13 +703,18 @@ async function run(env) {
   console.log(
     "NABZ_CRON_END",
     JSON.stringify({
+
       group,
+
       feeds:
         feeds.length,
+
       fresh:
         fresh.length,
+
       publishedThisRun:
         sent
+
     })
   );
 }
@@ -571,7 +732,7 @@ async function fetchFeed(feed) {
       {
         headers: {
           "User-Agent":
-            "Nabz-News-Bot/5.0"
+            "Nabz-News-Bot/6.0"
         }
       }
     );
@@ -618,6 +779,7 @@ async function fetchFeed(feed) {
 
 
     .map(item => ({
+
       ...item,
 
       feedName:
@@ -625,6 +787,7 @@ async function fetchFeed(feed) {
 
       category:
         feed.category
+
     }));
 }
 
@@ -927,7 +1090,7 @@ function decodeXml(value) {
 
 
 // =========================
-// GEMINI
+// CLOUDFLARE AI TRANSLATION
 // =========================
 
 async function translate(
@@ -935,55 +1098,84 @@ async function translate(
   env
 ) {
 
-  if (
-    !env.GEMINI_API_KEY
-  ) {
+  if (!env.AI) {
 
     throw new Error(
-      "GEMINI_API_KEY missing"
+      "Workers AI binding missing"
     );
   }
 
 
+  const sourceLang =
+    detectSourceLanguage(item);
+
+
+  console.log(
+    "AI_TRANSLATE",
+    JSON.stringify({
+
+      source:
+        item.feedName,
+
+      sourceLang,
+
+      targetLang:
+        "fa"
+
+    })
+  );
+
+
   /*
-   * مهم:
-   * مدل از Cloudflare ENV گرفته می‌شود.
+   * خبرهای فارسی را دوباره
+   * ترجمه نمی‌کنیم.
    */
 
-  const model =
-    env.GEMINI_MODEL ||
-    DEFAULT_MODEL;
+  if (
+    sourceLang === "fa"
+  ) {
+
+    return {
+
+      title:
+        item.title,
+
+      description:
+        item.description || ""
+
+    };
+  }
 
 
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
+  /*
+   * عنوان و توضیحات را در یک
+   * درخواست ترجمه می‌کنیم تا
+   * مصرف AI پایین بماند.
+   */
 
+  const prompt = `Translate this news item into Persian.
 
-  const prompt =
+Rules:
+- Do NOT summarize.
+- Do NOT rewrite.
+- Do NOT add information.
+- Do NOT remove information.
+- Preserve names exactly when possible.
+- Preserve organizations.
+- Preserve places.
+- Preserve numbers.
+- Preserve dates.
+- Preserve quotations.
+- Preserve factual meaning.
+- Translate only the supplied title and description.
+- If description is empty, return an empty description.
+- Return ONLY JSON.
 
-`Translate this news item into natural Persian.
-
-Do not summarize.
-Do not add information.
-Do not remove information.
-Do not invent information.
-
-Preserve:
-- names
-- organizations
-- places
-- numbers
-- dates
-- quotations
-- facts
-
-Translate ONLY the original title and supplied description.
-
-The description must remain a translation of the supplied description.
-If the supplied description is empty, return an empty description.
-
-Return ONLY valid JSON:
-{"title":"...","description":"..."}
+JSON format:
+{
+  "title": "Persian translation",
+  "description": "Persian translation"
+}
 
 TITLE:
 ${item.title}
@@ -992,253 +1184,254 @@ DESCRIPTION:
 ${item.description || ""}`;
 
 
-  const body = {
+  let result;
 
-    contents: [
 
-      {
-        parts: [
+  try {
 
-          {
-            text:
-              prompt
-          }
+    result =
+      await env.AI.run(
+        TRANSLATION_MODEL,
+        {
+          text:
+            prompt,
 
-        ]
-      }
+          source_lang:
+            sourceLang,
 
-    ],
+          target_lang:
+            "fa"
+        }
+      );
 
-    generationConfig: {
+  } catch (e) {
 
-      temperature:
-        0.1,
+    console.error(
+      "AI_TRANSLATION_ERROR",
+      e?.message ||
+      String(e)
+    );
 
-      responseMimeType:
-        "application/json"
-    }
-  };
+    throw e;
+  }
+
+
+  const raw =
+    String(
+      result?.translated_text ||
+      ""
+    ).trim();
+
+
+  if (!raw) {
+
+    throw new Error(
+      "Workers AI returned empty translation"
+    );
+  }
 
 
   /*
-   * Gemini ممکن است موقتاً
-   * 503 / 429 / 500 بدهد.
+   * مدل ممکن است JSON را
+   * داخل ```json قرار دهد.
    */
 
-  const retryDelays = [
-    1500,
-    3500,
-    7000
-  ];
+  let cleaned =
+    raw
+      .replace(
+        /^```json\s*/i,
+        ""
+      )
+      .replace(
+        /^```\s*/i,
+        ""
+      )
+      .replace(
+        /\s*```$/i,
+        ""
+      )
+      .trim();
 
 
-  let lastError =
-    "Gemini unavailable";
+  let parsed;
 
 
-  for (
-    let attempt = 0;
-    attempt <=
-      retryDelays.length;
-    attempt++
-  ) {
+  try {
 
-    try {
+    parsed =
+      JSON.parse(
+        cleaned
+      );
 
-      const response =
-        await fetch(
-          url,
-          {
-            method:
-              "POST",
+  } catch {
 
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
+    /*
+     * اگر JSON کامل نبود،
+     * تلاش دوم برای استخراج
+     * اولین آبجکت JSON.
+     */
 
-            body:
-              JSON.stringify(body)
-          }
-        );
-
-
-      const text =
-        await response.text();
-
-
-      if (response.ok) {
-
-        let json;
-
-
-        try {
-
-          json =
-            JSON.parse(text);
-
-        } catch {
-
-          throw new Error(
-            "Gemini invalid response"
-          );
-        }
-
-
-        const generated =
-          json
-            ?.candidates?.[0]
-            ?.content?.parts
-            ?.map(
-              p =>
-                p.text || ""
-            )
-            .join("")
-            .trim();
-
-
-        if (!generated) {
-
-          throw new Error(
-            "Gemini empty response"
-          );
-        }
-
-
-        let parsed;
-
-
-        try {
-
-          parsed =
-            JSON.parse(
-              generated
-            );
-
-        } catch {
-
-          const match =
-            generated.match(
-              /\{[\s\S]*\}/
-            );
-
-
-          if (!match) {
-
-            throw new Error(
-              "Gemini invalid JSON"
-            );
-          }
-
-
-          parsed =
-            JSON.parse(
-              match[0]
-            );
-        }
-
-
-        return {
-
-          title:
-            String(
-              parsed.title ||
-              ""
-            ).trim(),
-
-          description:
-            String(
-              parsed.description ||
-              ""
-            ).trim()
-
-        };
-      }
-
-
-      lastError =
-        "Gemini HTTP " +
-        response.status +
-        ": " +
-        text.slice(
-          0,
-          500
-        );
-
-
-      /*
-       * فقط خطاهای موقت Retry شوند.
-       */
-
-      if (
-        response.status !== 503 &&
-        response.status !== 429 &&
-        response.status !== 500
-      ) {
-
-        throw new Error(
-          lastError
-        );
-      }
-
-
-      console.warn(
-        "GEMINI_RETRY",
-
-        item.feedName,
-
-        "attempt=" +
-        (attempt + 1),
-
-        "status=" +
-        response.status
+    const match =
+      cleaned.match(
+        /\{[\s\S]*\}/
       );
 
 
-    } catch (e) {
+    if (!match) {
 
-      lastError =
-        e?.message ||
-        String(e);
-
-
-      /*
-       * اگر خطا قابل Retry نیست
-       * فوراً متوقف شو.
-       */
-
-      if (
-        !lastError.includes(
-          "Gemini HTTP 503"
-        ) &&
-        !lastError.includes(
-          "Gemini HTTP 429"
-        ) &&
-        !lastError.includes(
-          "Gemini HTTP 500"
-        )
-      ) {
-
-        throw e;
-      }
+      throw new Error(
+        "AI returned invalid translation JSON"
+      );
     }
 
 
-    if (
-      attempt <
-      retryDelays.length
-    ) {
+    try {
 
-      await sleep(
-        retryDelays[attempt]
+      parsed =
+        JSON.parse(
+          match[0]
+        );
+
+    } catch {
+
+      throw new Error(
+        "AI returned malformed JSON"
       );
     }
   }
 
 
-  throw new Error(
-    lastError
-  );
+  const title =
+    String(
+      parsed?.title ||
+      ""
+    ).trim();
+
+
+  const description =
+    String(
+      parsed?.description ||
+      ""
+    ).trim();
+
+
+  if (!title) {
+
+    throw new Error(
+      "AI translation title is empty"
+    );
+  }
+
+
+  return {
+
+    title,
+
+    description
+
+  };
+}
+
+
+// =========================
+// LANGUAGE DETECTION
+// =========================
+
+function detectSourceLanguage(item) {
+
+  const name =
+    String(
+      item.feedName || ""
+    ).toLowerCase();
+
+
+  const title =
+    String(
+      item.title || ""
+    );
+
+
+  /*
+   * منابع فارسی
+   */
+
+  const persianSources = [
+
+    "bbc persian",
+    "iran international",
+    "radio farda",
+    "dw farsi",
+    "isna",
+    "tasnim",
+    "tabnak",
+    "mehr",
+    "khabar online",
+    "yjc",
+    "asriran",
+    "fars",
+    "ilna"
+
+  ];
+
+
+  if (
+    persianSources.some(
+      x =>
+        name.includes(x)
+    )
+  ) {
+
+    return "fa";
+  }
+
+
+  /*
+   * روسی
+   */
+
+  if (
+    name.includes("tass") ||
+    name.includes("ria novosti")
+  ) {
+
+    return "ru";
+  }
+
+
+  /*
+   * ایتالیایی
+   */
+
+  if (
+    name.includes("ansa")
+  ) {
+
+    return "it";
+  }
+
+
+  /*
+   * تشخیص کمکی فارسی
+   */
+
+  if (
+    /[\u0600-\u06FF]/.test(
+      title
+    ) &&
+    !/[A-Za-z]{4,}/.test(
+      title
+    )
+  ) {
+
+    return "fa";
+  }
+
+
+  /*
+   * منابع فعلی عمدتاً انگلیسی
+   */
+
+  return "en";
 }
 
 
@@ -1283,10 +1476,6 @@ async function send(
     item.category
   ];
 
-
-  /*
-   * فرمت نهایی پیام
-   */
 
   const text = [
 
@@ -1349,6 +1538,7 @@ async function send(
   console.log(
     "TELEGRAM_SEND",
     JSON.stringify({
+
       chat_id:
         payload.chat_id,
 
@@ -1357,6 +1547,7 @@ async function send(
 
       source:
         item.feedName
+
     })
   );
 
@@ -1421,6 +1612,7 @@ async function tg(
             JSON.stringify(
               payload
             )
+
         }
       );
 
@@ -1699,7 +1891,7 @@ async function put(
 
     {
       expirationTtl:
-        315360000
+        31536000
     }
 
   );
@@ -1862,13 +2054,6 @@ function normalize(value) {
       value || ""
     ).trim();
 
-
-  /*
-   * اگر فقط عدد باشد:
-   * 4352824876
-   * تبدیل می‌شود به:
-   * -1004352824876
-   */
 
   if (
     /^\d+$/.test(x)
