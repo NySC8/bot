@@ -53,16 +53,13 @@ const FEEDS = [
   }
 ];
 
-const ADMIN_USERNAMES = new Set([
-  "mathphobis",
-  "clearviolet"
-]);
-
-const CATEGORY_NAMES = {
-  iran: "ایران",
-  middle_east: "خاورمیانه",
-  world: "جهان"
-};
+/*
+ * ONLY this Telegram account can receive bot statistics.
+ * Authentication is done by numeric Telegram User ID,
+ * not by username.
+ */
+const ADMIN_USER_ID = "8885912152";
+const ADMIN_USERNAME = "clearviolet";
 
 export default {
   async fetch(request, env) {
@@ -72,12 +69,15 @@ export default {
       /*
        * Telegram Webhook
        */
-      if (request.method === "POST" && url.pathname === "/telegram") {
+      if (
+        request.method === "POST" &&
+        url.pathname === "/telegram"
+      ) {
         return await handleTelegramUpdate(request, env);
       }
 
       /*
-       * Simple health check
+       * Health check
        */
       if (request.method === "GET") {
         return new Response(
@@ -91,19 +91,30 @@ export default {
         );
       }
 
-      return new Response("Method Not Allowed", { status: 405 });
+      return new Response(
+        "Method Not Allowed",
+        { status: 405 }
+      );
 
     } catch (error) {
-      console.error("FETCH_ERROR", error?.stack || error?.message || String(error));
+      console.error(
+        "FETCH_ERROR",
+        error?.stack ||
+        error?.message ||
+        String(error)
+      );
 
-      return new Response("Internal error", {
-        status: 500
-      });
+      return new Response(
+        "Internal error",
+        { status: 500 }
+      );
     }
   },
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runNewsWorker(env));
+    ctx.waitUntil(
+      runNewsWorker(env)
+    );
   }
 };
 
@@ -115,7 +126,10 @@ export default {
 async function runNewsWorker(env) {
   const runStartedAt = new Date();
 
-  console.log("NABZ_CRON_START", runStartedAt.toISOString());
+  console.log(
+    "NABZ_CRON_START",
+    runStartedAt.toISOString()
+  );
 
   try {
     await initializeStats(env);
@@ -124,7 +138,8 @@ async function runNewsWorker(env) {
       "stats:last_run",
       runStartedAt.toISOString(),
       {
-        expirationTtl: 60 * 60 * 24 * 30
+        expirationTtl:
+          60 * 60 * 24 * 30
       }
     );
 
@@ -133,17 +148,26 @@ async function runNewsWorker(env) {
     let freshItems = [];
 
     /*
-     * Fetch all RSS feeds simultaneously
+     * Fetch all RSS feeds simultaneously.
      */
-    const results = await Promise.allSettled(
-      FEEDS.map(feed => fetchFeed(feed))
-    );
+    const results =
+      await Promise.allSettled(
+        FEEDS.map(feed =>
+          fetchFeed(feed, env)
+        )
+      );
 
-    for (let i = 0; i < results.length; i++) {
+    for (
+      let i = 0;
+      i < results.length;
+      i++
+    ) {
       const result = results[i];
       const feed = FEEDS[i];
 
-      if (result.status === "fulfilled") {
+      if (
+        result.status === "fulfilled"
+      ) {
         successfulFeeds++;
 
         console.log(
@@ -152,14 +176,18 @@ async function runNewsWorker(env) {
           "items=" + result.value.length
         );
 
-        freshItems.push(...result.value);
+        freshItems.push(
+          ...result.value
+        );
+
       } else {
         failedFeeds++;
 
         console.error(
           "RSS_ERROR",
           feed.name,
-          result.reason?.message || String(result.reason)
+          result.reason?.message ||
+          String(result.reason)
         );
       }
     }
@@ -177,7 +205,8 @@ async function runNewsWorker(env) {
       "stats:last_feed_success",
       String(successfulFeeds),
       {
-        expirationTtl: 60 * 60 * 24 * 30
+        expirationTtl:
+          60 * 60 * 24 * 30
       }
     );
 
@@ -185,12 +214,13 @@ async function runNewsWorker(env) {
       "stats:last_feed_failed",
       String(failedFeeds),
       {
-        expirationTtl: 60 * 60 * 24 * 30
+        expirationTtl:
+          60 * 60 * 24 * 30
       }
     );
 
     /*
-     * Sort newest first
+     * Newest first.
      */
     freshItems.sort(
       (a, b) =>
@@ -198,31 +228,34 @@ async function runNewsWorker(env) {
         new Date(b.publishedAt).getTime()
     );
 
-    /*
-     * Maximum number of news items per execution
-     */
-    const maxPublish = Number(
-      env.MAX_PUBLISH_PER_RUN || 8
-    );
+    const maxPublish =
+      Number(
+        env.MAX_PUBLISH_PER_RUN || 8
+      );
 
     let publishedThisRun = 0;
 
     for (const item of freshItems) {
-      if (publishedThisRun >= maxPublish) {
+
+      if (
+        publishedThisRun >= maxPublish
+      ) {
         break;
       }
 
       try {
-        const fingerprint = await sha256(
-          `${item.feedName}|${item.link}|${item.title}`
-        );
+        const fingerprint =
+          await sha256(
+            `${item.feedName}|${item.link}|${item.title}`
+          );
 
         /*
-         * Duplicate protection
+         * Duplicate protection.
          */
-        const alreadySeen = await env.SEEN.get(
-          `seen:${fingerprint}`
-        );
+        const alreadySeen =
+          await env.SEEN.get(
+            `seen:${fingerprint}`
+          );
 
         if (alreadySeen) {
           console.log(
@@ -235,8 +268,8 @@ async function runNewsWorker(env) {
         }
 
         /*
-         * Mark only temporarily before processing.
-         * If something fails, we delete it below.
+         * Temporary dedupe marker.
+         * If publication fails, it is deleted.
          */
         await env.SEEN.put(
           `seen:${fingerprint}`,
@@ -244,10 +277,12 @@ async function runNewsWorker(env) {
             feed: item.feedName,
             title: item.title,
             link: item.link,
-            detectedAt: new Date().toISOString()
+            detectedAt:
+              new Date().toISOString()
           }),
           {
-            expirationTtl: 60 * 60 * 48
+            expirationTtl:
+              60 * 60 * 48
           }
         );
 
@@ -258,15 +293,21 @@ async function runNewsWorker(env) {
         );
 
         /*
-         * Gemini translation
+         * Translate with Gemini.
          */
-        const translated = await translateWithGemini(
-          item,
-          env
-        );
+        const translated =
+          await translateWithGemini(
+            item,
+            env
+          );
 
-        if (!translated || !translated.title) {
-          throw new Error("Gemini returned no translated title");
+        if (
+          !translated ||
+          !translated.title
+        ) {
+          throw new Error(
+            "Gemini returned no translated title"
+          );
         }
 
         console.log(
@@ -275,17 +316,23 @@ async function runNewsWorker(env) {
         );
 
         /*
-         * Telegram publication
+         * Send to Telegram.
          */
-        const telegramResult = await sendNewsToTelegram(
-          item,
-          translated,
-          env
-        );
+        const telegramResult =
+          await sendNewsToTelegram(
+            item,
+            translated,
+            env
+          );
 
-        if (!telegramResult.ok) {
+        if (
+          !telegramResult.ok
+        ) {
           throw new Error(
-            `Telegram error: ${telegramResult.description || "unknown"}`
+            `Telegram error: ${
+              telegramResult.description ||
+              "unknown"
+            }`
           );
         }
 
@@ -296,8 +343,8 @@ async function runNewsWorker(env) {
         );
 
         /*
-         * Only after successful Telegram publication:
-         * update statistics.
+         * Update statistics ONLY after
+         * successful Telegram publication.
          */
         await incrementStat(
           env,
@@ -311,19 +358,24 @@ async function runNewsWorker(env) {
 
         await incrementStat(
           env,
-          "stats:source:" + sanitizeKey(item.feedName)
+          "stats:source:" +
+          sanitizeKey(item.feedName)
         );
 
-        const publishedAt = new Date();
-        const originalPublishedAt = new Date(item.publishedAt);
+        const publishedAt =
+          new Date();
+
+        const originalPublishedAt =
+          new Date(item.publishedAt);
 
         const latencySeconds =
           Math.max(
             0,
             Math.round(
-              (publishedAt.getTime() -
-                originalPublishedAt.getTime()) /
-                1000
+              (
+                publishedAt.getTime() -
+                originalPublishedAt.getTime()
+              ) / 1000
             )
           );
 
@@ -331,7 +383,8 @@ async function runNewsWorker(env) {
           "stats:last_published_at",
           publishedAt.toISOString(),
           {
-            expirationTtl: 60 * 60 * 24 * 30
+            expirationTtl:
+              60 * 60 * 24 * 30
           }
         );
 
@@ -339,7 +392,8 @@ async function runNewsWorker(env) {
           "stats:last_latency_seconds",
           String(latencySeconds),
           {
-            expirationTtl: 60 * 60 * 24 * 30
+            expirationTtl:
+              60 * 60 * 24 * 30
           }
         );
 
@@ -351,36 +405,44 @@ async function runNewsWorker(env) {
             source: item.feedName,
             category: item.category,
             title: item.title,
-            publishedAt: item.publishedAt,
-            detectedAt: new Date().toISOString(),
+            publishedAt:
+              item.publishedAt,
+            detectedAt:
+              new Date().toISOString(),
             latencySeconds
           })
         );
 
       } catch (error) {
+
         console.error(
           "ITEM_ERROR",
           item.feedName,
           item.title,
-          error?.stack || error?.message || String(error)
+          error?.stack ||
+          error?.message ||
+          String(error)
         );
 
         /*
-         * If publication failed, remove temporary dedupe key
-         * so the item can be tried again later.
+         * Allow failed news to be retried.
          */
         try {
-          const fingerprint = await sha256(
-            `${item.feedName}|${item.link}|${item.title}`
-          );
+          const fingerprint =
+            await sha256(
+              `${item.feedName}|${item.link}|${item.title}`
+            );
 
           await env.SEEN.delete(
             `seen:${fingerprint}`
           );
+
         } catch (cleanupError) {
+
           console.error(
             "CLEANUP_ERROR",
-            cleanupError?.message || String(cleanupError)
+            cleanupError?.message ||
+            String(cleanupError)
           );
         }
       }
@@ -389,31 +451,44 @@ async function runNewsWorker(env) {
     console.log(
       "NABZ_CRON_END",
       JSON.stringify({
-        freshItems: freshItems.length,
+        freshItems:
+          freshItems.length,
         publishedThisRun,
-        finishedAt: new Date().toISOString()
+        finishedAt:
+          new Date().toISOString()
       })
     );
 
   } catch (error) {
+
     console.error(
       "CRON_FATAL",
-      error?.stack || error?.message || String(error)
+      error?.stack ||
+      error?.message ||
+      String(error)
     );
   }
 }
 
 
 /* =========================================================
-   RSS
+   RSS FETCH
    ========================================================= */
 
-async function fetchFeed(feed) {
-  const response = await fetch(feed.url, {
-    headers: {
-      "User-Agent": "Nabz-News-Bot/1.0"
-    }
-  });
+async function fetchFeed(
+  feed,
+  env
+) {
+  const response =
+    await fetch(
+      feed.url,
+      {
+        headers: {
+          "User-Agent":
+            "Nabz-News-Bot/1.0"
+        }
+      }
+    );
 
   if (!response.ok) {
     throw new Error(
@@ -421,38 +496,60 @@ async function fetchFeed(feed) {
     );
   }
 
-  const xml = await response.text();
+  const xml =
+    await response.text();
 
-  const items = parseFeed(xml);
+  const items =
+    parseFeed(xml);
 
-  const now = Date.now();
+  const now =
+    Date.now();
 
-  const maxAgeMinutes = Number(
-    globalThis.__NABZ_MAX_AGE_MINUTES || 5
-  );
+  const maxAgeMinutes =
+    Number(
+      env.MAX_NEWS_AGE_MINUTES || 5
+    );
 
-  /*
-   * These values are overwritten by fetchFeedWithLimits
-   * through environment-independent defaults.
-   */
-  const maxAgeMs = 5 * 60 * 1000;
-  const maxFutureMs = 2 * 60 * 1000;
+  const maxFutureMinutes =
+    Number(
+      env.MAX_FUTURE_MINUTES || 2
+    );
+
+  const maxAgeMs =
+    maxAgeMinutes *
+    60 *
+    1000;
+
+  const maxFutureMs =
+    maxFutureMinutes *
+    60 *
+    1000;
 
   const fresh = [];
 
   for (const item of items) {
-    if (!item.title || !item.link || !item.publishedAt) {
+
+    if (
+      !item.title ||
+      !item.link ||
+      !item.publishedAt
+    ) {
       continue;
     }
 
     const timestamp =
-      new Date(item.publishedAt).getTime();
+      new Date(
+        item.publishedAt
+      ).getTime();
 
-    if (!Number.isFinite(timestamp)) {
+    if (
+      !Number.isFinite(timestamp)
+    ) {
       continue;
     }
 
-    const age = now - timestamp;
+    const age =
+      now - timestamp;
 
     /*
      * Ignore old stories.
@@ -462,7 +559,7 @@ async function fetchFeed(feed) {
     }
 
     /*
-     * Ignore stories whose source clock is too far ahead.
+     * Ignore future-dated stories.
      */
     if (age < -maxFutureMs) {
       continue;
@@ -470,8 +567,10 @@ async function fetchFeed(feed) {
 
     fresh.push({
       ...item,
-      feedName: feed.name,
-      category: feed.category
+      feedName:
+        feed.name,
+      category:
+        feed.category
     });
   }
 
@@ -489,63 +588,118 @@ function parseFeed(xml) {
   /*
    * RSS <item>
    */
-  const rssItems = xml.match(
-    /<item\b[\s\S]*?<\/item>/gi
-  ) || [];
+  const rssItems =
+    xml.match(
+      /<item\b[\s\S]*?<\/item>/gi
+    ) || [];
 
-  for (const block of rssItems) {
+  for (
+    const block of rssItems
+  ) {
+
     const title =
       cleanText(
-        getXmlValue(block, "title")
+        getXmlValue(
+          block,
+          "title"
+        )
       );
 
     const link =
       cleanUrl(
-        getXmlValue(block, "link")
+        getXmlValue(
+          block,
+          "link"
+        )
       );
 
     const description =
       cleanText(
-        getXmlValue(block, "description")
+        getXmlValue(
+          block,
+          "description"
+        )
       );
 
     const pubDate =
-      getXmlValue(block, "pubDate") ||
-      getXmlValue(block, "published") ||
-      getXmlValue(block, "updated");
+      getXmlValue(
+        block,
+        "pubDate"
+      ) ||
+      getXmlValue(
+        block,
+        "published"
+      ) ||
+      getXmlValue(
+        block,
+        "updated"
+      );
 
-    if (title && link && pubDate) {
-      results.push({
-        title,
-        link,
-        description,
-        publishedAt: new Date(pubDate).toISOString()
-      });
+    if (
+      title &&
+      link &&
+      pubDate
+    ) {
+      const parsedDate =
+        new Date(pubDate);
+
+      if (
+        !Number.isNaN(
+          parsedDate.getTime()
+        )
+      ) {
+        results.push({
+          title,
+          link,
+          description,
+          publishedAt:
+            parsedDate.toISOString()
+        });
+      }
     }
   }
 
   /*
    * Atom <entry>
    */
-  const atomEntries = xml.match(
-    /<entry\b[\s\S]*?<\/entry>/gi
-  ) || [];
+  const atomEntries =
+    xml.match(
+      /<entry\b[\s\S]*?<\/entry>/gi
+    ) || [];
 
-  for (const block of atomEntries) {
+  for (
+    const block of atomEntries
+  ) {
+
     const title =
       cleanText(
-        getXmlValue(block, "title")
+        getXmlValue(
+          block,
+          "title"
+        )
       );
 
     const description =
       cleanText(
-        getXmlValue(block, "summary") ||
-        getXmlValue(block, "content")
+        getXmlValue(
+          block,
+          "summary"
+        ) ||
+        getXmlValue(
+          block,
+          "content"
+        )
       );
 
     const pubDate =
-      getXmlValue(block, "published") ||
-      getXmlValue(block, "updated");
+      getXmlValue(
+        block,
+        "published"
+      ) ||
+      getXmlValue(
+        block,
+        "updated"
+      );
 
     let link = "";
 
@@ -555,22 +709,44 @@ function parseFeed(xml) {
       );
 
     if (linkMatch) {
-      link = decodeXml(linkMatch[1]);
+      link =
+        decodeXml(
+          linkMatch[1]
+        );
     }
 
     if (!link) {
-      link = cleanUrl(
-        getXmlValue(block, "link")
-      );
+      link =
+        cleanUrl(
+          getXmlValue(
+            block,
+            "link"
+          )
+        );
     }
 
-    if (title && link && pubDate) {
-      results.push({
-        title,
-        link,
-        description,
-        publishedAt: new Date(pubDate).toISOString()
-      });
+    if (
+      title &&
+      link &&
+      pubDate
+    ) {
+
+      const parsedDate =
+        new Date(pubDate);
+
+      if (
+        !Number.isNaN(
+          parsedDate.getTime()
+        )
+      ) {
+        results.push({
+          title,
+          link,
+          description,
+          publishedAt:
+            parsedDate.toISOString()
+        });
+      }
     }
   }
 
@@ -578,62 +754,114 @@ function parseFeed(xml) {
 }
 
 
-function getXmlValue(block, tag) {
-  const regex = new RegExp(
-    `<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`,
-    "i"
-  );
+function getXmlValue(
+  block,
+  tag
+) {
+  const regex =
+    new RegExp(
+      `<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`,
+      "i"
+    );
 
-  const match = block.match(regex);
+  const match =
+    block.match(regex);
 
-  return match ? match[1] : "";
+  return match
+    ? match[1]
+    : "";
 }
 
 
 function cleanText(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   return decodeXml(
     value
-      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
+      .replace(
+        /<!\[CDATA\[([\s\S]*?)\]\]>/gi,
+        "$1"
+      )
+      .replace(
+        /<script[\s\S]*?<\/script>/gi,
+        ""
+      )
+      .replace(
+        /<style[\s\S]*?<\/style>/gi,
+        ""
+      )
+      .replace(
+        /<[^>]+>/g,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
       .trim()
   );
 }
 
 
 function cleanUrl(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   return decodeXml(
     value
-      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
+      .replace(
+        /<!\[CDATA\[([\s\S]*?)\]\]>/gi,
+        "$1"
+      )
       .trim()
   );
 }
 
 
 function decodeXml(value) {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/gi, "'");
+  return String(value)
+    .replace(
+      /&amp;/g,
+      "&"
+    )
+    .replace(
+      /&lt;/g,
+      "<"
+    )
+    .replace(
+      /&gt;/g,
+      ">"
+    )
+    .replace(
+      /&quot;/g,
+      '"'
+    )
+    .replace(
+      /&#39;/g,
+      "'"
+    )
+    .replace(
+      /&#x27;/gi,
+      "'"
+    );
 }
 
 
 /* =========================================================
-   GEMINI
+   GEMINI TRANSLATION
    ========================================================= */
 
-async function translateWithGemini(item, env) {
+async function translateWithGemini(
+  item,
+  env
+) {
   if (!env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is missing");
+    throw new Error(
+      "GEMINI_API_KEY is missing"
+    );
   }
 
   const model =
@@ -656,7 +884,8 @@ IMPORTANT:
 - Translate the provided description only.
 - If the description is empty, return an empty description.
 - Return ONLY valid JSON.
-- JSON format:
+
+JSON format:
 {
   "title": "...",
   "description": "..."
@@ -669,58 +898,74 @@ DESCRIPTION:
 ${item.description || ""}
 `;
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
+  const response =
+    await fetch(
+      endpoint,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
             {
-              text: prompt
+              parts: [
+                {
+                  text: prompt
+                }
+              ]
             }
-          ]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: "application/json"
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType:
+              "application/json"
+          }
+        })
       }
-    })
-  });
+    );
 
   if (!response.ok) {
-    const errorText = await response.text();
+
+    const errorText =
+      await response.text();
 
     throw new Error(
       `Gemini HTTP ${response.status}: ${errorText.slice(0, 500)}`
     );
   }
 
-  const data = await response.json();
+  const data =
+    await response.json();
 
   const text =
     data?.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
+      ?.map(
+        part =>
+          part.text || ""
+      )
       .join("")
       .trim();
 
   if (!text) {
-    throw new Error("Gemini returned empty response");
+    throw new Error(
+      "Gemini returned empty response"
+    );
   }
 
   let parsed;
 
   try {
-    parsed = JSON.parse(text);
+    parsed =
+      JSON.parse(text);
+
   } catch {
-    /*
-     * Sometimes models wrap JSON in markdown.
-     */
+
     const match =
-      text.match(/\{[\s\S]*\}/);
+      text.match(
+        /\{[\s\S]*\}/
+      );
 
     if (!match) {
       throw new Error(
@@ -728,21 +973,28 @@ ${item.description || ""}
       );
     }
 
-    parsed = JSON.parse(match[0]);
+    parsed =
+      JSON.parse(
+        match[0]
+      );
   }
 
   return {
     title:
-      String(parsed.title || "").trim(),
+      String(
+        parsed.title || ""
+      ).trim(),
 
     description:
-      String(parsed.description || "").trim()
+      String(
+        parsed.description || ""
+      ).trim()
   };
 }
 
 
 /* =========================================================
-   TELEGRAM NEWS
+   SEND NEWS TO TELEGRAM
    ========================================================= */
 
 async function sendNewsToTelegram(
@@ -751,38 +1003,67 @@ async function sendNewsToTelegram(
   env
 ) {
   const categoryThreadMap = {
-    iran: env.TOPIC_IRAN,
-    middle_east: env.TOPIC_MIDDLE_EAST,
-    world: env.TOPIC_WORLD
+    iran:
+      env.TOPIC_IRAN,
+
+    middle_east:
+      env.TOPIC_MIDDLE_EAST,
+
+    world:
+      env.TOPIC_WORLD
   };
 
   const threadId =
-    categoryThreadMap[item.category];
+    categoryThreadMap[
+      item.category
+    ];
 
   const sourceTime =
-    formatUtc(item.publishedAt);
+    formatUtc(
+      item.publishedAt
+    );
 
   const text = [
-    `<b>${escapeHtml(translated.title)}</b>`,
+    `<b>${escapeHtml(
+      translated.title
+    )}</b>`,
+
     translated.description
-      ? escapeHtml(translated.description)
+      ? escapeHtml(
+          translated.description
+        )
       : "",
+
     "",
-    `📰 ${escapeHtml(item.feedName)}`,
+
+    `📰 ${escapeHtml(
+      item.feedName
+    )}`,
+
     `🕐 ${sourceTime}`,
+
     "",
-    `🔗 <a href="${escapeAttribute(item.link)}">منبع خبر</a>`
+
+    `🔗 <a href="${escapeAttribute(
+      item.link
+    )}">منبع خبر</a>`
   ]
     .filter(Boolean)
     .join("\n");
 
   const payload = {
-    chat_id: normalizeChatId(
-      env.GROUP_CHAT_ID
-    ),
+    chat_id:
+      normalizeChatId(
+        env.GROUP_CHAT_ID
+      ),
+
     text,
-    parse_mode: "HTML",
-    disable_web_page_preview: false
+
+    parse_mode:
+      "HTML",
+
+    disable_web_page_preview:
+      false
   };
 
   if (threadId) {
@@ -799,7 +1080,7 @@ async function sendNewsToTelegram(
 
 
 /* =========================================================
-   TELEGRAM WEBHOOK / START
+   TELEGRAM WEBHOOK
    ========================================================= */
 
 async function handleTelegramUpdate(
@@ -809,14 +1090,18 @@ async function handleTelegramUpdate(
   let update;
 
   try {
-    update = await request.json();
+    update =
+      await request.json();
+
   } catch {
-    return new Response("Bad JSON", {
-      status: 400
-    });
+    return new Response(
+      "Bad JSON",
+      { status: 400 }
+    );
   }
 
   try {
+
     const message =
       update?.message;
 
@@ -825,9 +1110,15 @@ async function handleTelegramUpdate(
     }
 
     const text =
-      String(message.text || "").trim();
+      String(
+        message.text || ""
+      ).trim();
 
-    if (!text.toLowerCase().startsWith("/start")) {
+    if (
+      !text
+        .toLowerCase()
+        .startsWith("/start")
+    ) {
       return new Response("OK");
     }
 
@@ -835,28 +1126,45 @@ async function handleTelegramUpdate(
       message.from || {};
 
     const username =
-      String(user.username || "")
-        .replace(/^@/, "")
+      String(
+        user.username || ""
+      )
+        .replace(
+          /^@/,
+          ""
+        )
         .toLowerCase();
+
+    const userId =
+      String(
+        user.id || ""
+      );
 
     console.log(
       "START_COMMAND",
       JSON.stringify({
         username,
-        userId: user.id,
-        chatId: message.chat?.id
+        userId,
+        chatId:
+          message.chat?.id
       })
     );
 
     /*
-     * Only these two usernames receive statistics.
+     * ONLY Telegram User ID 8885912152
+     * can receive statistics.
      */
-    if (!ADMIN_USERNAMES.has(username)) {
+    if (
+      userId !== ADMIN_USER_ID
+    ) {
+
       await telegramApi(
         env.BOT_TOKEN,
         "sendMessage",
         {
-          chat_id: message.chat.id,
+          chat_id:
+            message.chat.id,
+
           text:
             "سلام 👋\n\n" +
             "به نبض خوش آمدید.\n" +
@@ -867,34 +1175,52 @@ async function handleTelegramUpdate(
       return new Response("OK");
     }
 
+    /*
+     * Authorized administrator.
+     */
     const stats =
       await getStats(env);
 
     const statsText =
-      buildStatsMessage(stats, username);
+      buildStatsMessage(
+        stats
+      );
 
     await telegramApi(
       env.BOT_TOKEN,
       "sendMessage",
       {
-        chat_id: message.chat.id,
-        text: statsText,
-        parse_mode: "HTML",
-        disable_web_page_preview: true
+        chat_id:
+          message.chat.id,
+
+        text:
+          statsText,
+
+        parse_mode:
+          "HTML",
+
+        disable_web_page_preview:
+          true
       }
     );
 
     console.log(
       "STATS_SENT",
-      username
+      JSON.stringify({
+        username,
+        userId
+      })
     );
 
     return new Response("OK");
 
   } catch (error) {
+
     console.error(
       "TELEGRAM_WEBHOOK_ERROR",
-      error?.stack || error?.message || String(error)
+      error?.stack ||
+      error?.message ||
+      String(error)
     );
 
     return new Response("OK");
@@ -906,41 +1232,54 @@ async function handleTelegramUpdate(
    STATISTICS
    ========================================================= */
 
-async function initializeStats(env) {
+async function initializeStats(
+  env
+) {
   const existing =
     await env.SEEN.get(
       "stats:started_at"
     );
 
   if (!existing) {
+
     await env.SEEN.put(
       "stats:started_at",
       new Date().toISOString(),
       {
-        expirationTtl: 60 * 60 * 24 * 3650
+        expirationTtl:
+          60 * 60 * 24 * 3650
       }
     );
   }
 }
 
 
-async function incrementStat(env, key) {
+async function incrementStat(
+  env,
+  key
+) {
   const current =
     Number(
-      await env.SEEN.get(key) || "0"
+      await env.SEEN.get(key) ||
+      "0"
     );
 
   await env.SEEN.put(
     key,
-    String(current + 1),
+    String(
+      current + 1
+    ),
     {
-      expirationTtl: 60 * 60 * 24 * 3650
+      expirationTtl:
+        60 * 60 * 24 * 3650
     }
   );
 }
 
 
-async function getStats(env) {
+async function getStats(
+  env
+) {
   const [
     total,
     iran,
@@ -951,33 +1290,76 @@ async function getStats(env) {
     lastPublishedAt,
     lastLatency
   ] = await Promise.all([
-    env.SEEN.get("stats:total"),
-    env.SEEN.get("stats:iran"),
-    env.SEEN.get("stats:middle_east"),
-    env.SEEN.get("stats:world"),
-    env.SEEN.get("stats:started_at"),
-    env.SEEN.get("stats:last_run"),
-    env.SEEN.get("stats:last_published_at"),
-    env.SEEN.get("stats:last_latency_seconds")
+    env.SEEN.get(
+      "stats:total"
+    ),
+
+    env.SEEN.get(
+      "stats:iran"
+    ),
+
+    env.SEEN.get(
+      "stats:middle_east"
+    ),
+
+    env.SEEN.get(
+      "stats:world"
+    ),
+
+    env.SEEN.get(
+      "stats:started_at"
+    ),
+
+    env.SEEN.get(
+      "stats:last_run"
+    ),
+
+    env.SEEN.get(
+      "stats:last_published_at"
+    ),
+
+    env.SEEN.get(
+      "stats:last_latency_seconds"
+    )
   ]);
 
   return {
-    total: Number(total || 0),
-    iran: Number(iran || 0),
-    middleEast: Number(middleEast || 0),
-    world: Number(world || 0),
+    total:
+      Number(
+        total || 0
+      ),
+
+    iran:
+      Number(
+        iran || 0
+      ),
+
+    middleEast:
+      Number(
+        middleEast || 0
+      ),
+
+    world:
+      Number(
+        world || 0
+      ),
+
     startedAt,
+
     lastRun,
+
     lastPublishedAt,
+
     lastLatencySeconds:
-      Number(lastLatency || 0)
+      Number(
+        lastLatency || 0
+      )
   };
 }
 
 
 function buildStatsMessage(
-  stats,
-  username
+  stats
 ) {
   const latency =
     stats.lastLatencySeconds > 0
@@ -986,25 +1368,45 @@ function buildStatsMessage(
 
   return [
     `<b>📊 آمار ربات نبض</b>`,
+
     "",
-    `👤 کاربر: @${escapeHtml(username)}`,
+
+    `👤 مدیر: @${ADMIN_USERNAME}`,
+
     "",
-    `<b>کل اخبار ارسال‌شده:</b> ${stats.total}`,
+
+    `<b>📰 کل اخبار ارسال‌شده:</b> ${stats.total}`,
+
     "",
+
     `🇮🇷 ایران: ${stats.iran}`,
+
     `🌍 خاورمیانه: ${stats.middleEast}`,
+
     `🌎 جهان: ${stats.world}`,
+
     "",
-    `<b>آخرین تأخیر ثبت‌شده:</b> ${latency}`,
+
+    `<b>⏱ آخرین تأخیر ثبت‌شده:</b> ${latency}`,
+
     "",
+
     stats.startedAt
-      ? `🟢 شروع ثبت آمار: ${formatUtc(stats.startedAt)}`
+      ? `🟢 شروع ثبت آمار: ${formatUtc(
+          stats.startedAt
+        )}`
       : `🟢 شروع ثبت آمار: نامشخص`,
+
     stats.lastPublishedAt
-      ? `📰 آخرین انتشار: ${formatUtc(stats.lastPublishedAt)}`
+      ? `📰 آخرین انتشار: ${formatUtc(
+          stats.lastPublishedAt
+        )}`
       : `📰 آخرین انتشار: هنوز انجام نشده`,
+
     stats.lastRun
-      ? `⚙️ آخرین اجرای ربات: ${formatUtc(stats.lastRun)}`
+      ? `⚙️ آخرین اجرای ربات: ${formatUtc(
+          stats.lastRun
+        )}`
       : `⚙️ آخرین اجرای ربات: نامشخص`
   ].join("\n");
 }
@@ -1020,24 +1422,40 @@ async function telegramApi(
   payload
 ) {
   if (!botToken) {
-    throw new Error("BOT_TOKEN is missing");
+    throw new Error(
+      "BOT_TOKEN is missing"
+    );
   }
 
   const url =
     `https://api.telegram.org/bot${botToken}/${method}`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
+  const response =
+    await fetch(
+      url,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+
+        body:
+          JSON.stringify(
+            payload
+          )
+      }
+    );
 
   const data =
     await response.json();
 
-  if (!response.ok || !data.ok) {
+  if (
+    !response.ok ||
+    !data.ok
+  ) {
+
     console.error(
       "TELEGRAM_API_ERROR",
       JSON.stringify(data)
@@ -1052,15 +1470,21 @@ async function telegramApi(
    HELPERS
    ========================================================= */
 
-function normalizeChatId(value) {
+function normalizeChatId(
+  value
+) {
   const chatId =
-    String(value || "").trim();
+    String(
+      value || ""
+    ).trim();
 
   /*
-   * If user supplied a normal numeric
-   * supergroup ID without -100 prefix.
+   * If the supergroup ID was entered
+   * without -100.
    */
-  if (/^\d+$/.test(chatId)) {
+  if (
+    /^\d+$/.test(chatId)
+  ) {
     return `-100${chatId}`;
   }
 
@@ -1068,22 +1492,46 @@ function normalizeChatId(value) {
 }
 
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function escapeHtml(
+  value
+) {
+  return String(
+    value || ""
+  )
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    );
 }
 
 
-function escapeAttribute(value) {
-  return escapeHtml(value)
-    .replace(/'/g, "&#39;");
+function escapeAttribute(
+  value
+) {
+  return escapeHtml(
+    value
+  ).replace(
+    /'/g,
+    "&#39;"
+  );
 }
 
 
-function formatUtc(value) {
+function formatUtc(
+  value
+) {
   if (!value) {
     return "نامشخص";
   }
@@ -1091,27 +1539,51 @@ function formatUtc(value) {
   const date =
     new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return "نامشخص";
   }
 
-  return date.toISOString()
-    .replace("T", " ")
-    .replace(/\.\d{3}Z$/, " UTC");
+  return date
+    .toISOString()
+    .replace(
+      "T",
+      " "
+    )
+    .replace(
+      /\.\d{3}Z$/,
+      " UTC"
+    );
 }
 
 
-function sanitizeKey(value) {
-  return String(value || "")
+function sanitizeKey(
+  value
+) {
+  return String(
+    value || ""
+  )
     .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "_")
-    .slice(0, 100);
+    .replace(
+      /[^a-z0-9_-]+/g,
+      "_"
+    )
+    .slice(
+      0,
+      100
+    );
 }
 
 
-async function sha256(text) {
+async function sha256(
+  text
+) {
   const data =
-    new TextEncoder().encode(text);
+    new TextEncoder()
+      .encode(text);
 
   const hash =
     await crypto.subtle.digest(
@@ -1122,8 +1594,11 @@ async function sha256(text) {
   return Array.from(
     new Uint8Array(hash)
   )
-    .map(byte =>
-      byte.toString(16).padStart(2, "0")
+    .map(
+      byte =>
+        byte
+          .toString(16)
+          .padStart(2, "0")
     )
     .join("");
 }
