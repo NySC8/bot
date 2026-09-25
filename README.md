@@ -1,23 +1,22 @@
-# Nabz Telegram News Bot
+# Nabz — Cloudflare Worker
 
-نسخه اولیه ربات خبری «نبض» برای انتشار خبر در سه Topic:
-- Iran
-- Middle East
-- World
+نسخه Cloudflare ربات خبری نبض.
 
-## راه‌اندازی
+ویژگی‌ها:
+- Cron هر ۱ دقیقه
+- دریافت RSS
+- فقط خبرهای تازه
+- جلوگیری از تکرار با Workers KV
+- ترجمه عنوان و توضیح موجود با Gemini
+- بدون خلاصه‌سازی یا تولید خبر
+- ارسال به تاپیک‌های ایران، خاورمیانه و جهان
 
-1. یک Bot جدید/توکن جدید از BotFather بگیرید.
-2. ربات را به گروه اضافه کنید و دسترسی ارسال پیام داشته باشد.
-3. مقدارهای `.env.example` را در `.env` کپی و تکمیل کنید.
-4. مقدار `GROUP_CHAT_ID` را با Chat ID گروه و سه مقدار `TOPIC_*` را با `message_thread_id` واقعی Topicها پر کنید.
-5. نصب:
-   `pip install -r requirements.txt`
-6. اجرا:
-   `python bot.py`
+Secrets لازم:
+BOT_TOKEN
+GROUP_CHAT_ID
+TOPIC_IRAN
+TOPIC_MIDDLE_EAST
+TOPIC_WORLD
+GEMINI_API_KEY
 
-## نکته
-این نسخه عمداً ترجمه و خلاصه‌سازی هوش مصنوعی را به API کلیددار متصل نکرده است تا توکن/API شما داخل GitHub قرار نگیرد. مرحله بعد می‌تواند یک provider ترجمه/LLM را از طریق Environment Variables اضافه کند.
-
-## تست اتصال
-قبل از scheduler، ربات با `get_me()` احراز هویت می‌شود. اگر توکن غلط باشد برنامه همان ابتدا خطا می‌دهد.
+نکته: اجرای هر دقیقه، هدف حدود ۲ دقیقه‌ای را ممکن می‌کند اما زمان دقیق ۲ دقیقه تضمین‌شده نیست.
