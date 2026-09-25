@@ -5,7 +5,9 @@
   "compatibility_date": "2026-09-25",
 
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": [
+      "* * * * *"
+    ]
   },
 
   "kv_namespaces": [
@@ -18,6 +20,7 @@
     "GEMINI_MODEL": "gemini-3.8-flash",
 
     "GROUP_CHAT_ID": "-1004352824876",
+
     "TOPIC_IRAN": "3",
     "TOPIC_MIDDLE_EAST": "4",
     "TOPIC_WORLD": "5",
