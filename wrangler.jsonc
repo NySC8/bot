@@ -5,7 +5,7 @@
   "compatibility_date": "2026-09-25",
   "triggers": { "crons": ["* * * * *"] },
   "kv_namespaces": [
-    { "binding": "SEEN", "id": "REPLACE_WITH_YOUR_EXISTING_KV_ID" }
+    { "binding": "SEEN", "id": "23528636ed4346468cdea428313b07a8" }
   ],
   "ai": { "binding": "AI", "remote": true },
   "vars": {
