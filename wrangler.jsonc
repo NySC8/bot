@@ -3,19 +3,23 @@
   "name": "nabz",
   "main": "src/index.js",
   "compatibility_date": "2026-09-25",
+
   "triggers": {
     "crons": ["* * * * *"]
   },
+
   "kv_namespaces": [
     {
       "binding": "SEEN",
       "id": "23528636ed4346468cdea428313b07a8"
     }
   ],
+
   "ai": {
     "binding": "AI",
     "remote": true
   },
+
   "vars": {
     "GROUP_CHAT_ID": "-1004352824876",
     "TOPIC_IRAN": "3",
