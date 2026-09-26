@@ -2,16 +2,20 @@ const AI_MODEL = "@cf/zai-org/glm-4.7-flash";
 
 const MIN_AGE = 2 * 60 * 1000;
 const MAX_AGE = 5 * 60 * 1000;
+
 const FEED_TIMEOUT = 8000;
 const ARTICLE_TIMEOUT = 9000;
+
 const FEED_BATCH = 6;
 const MAX_ARTICLE = 9000;
-const MAX_CAPTION = 4000;
+
+const TG_TEXT_LIMIT = 4000;
+const TG_CAPTION_LIMIT = 1000;
+
 const ADMIN_ID = "8885912152";
 const FOOTER = "@Zarathushtra_ir";
 
 const FEEDS = [
-  // IRAN
   ["Iran","BBC Persian","https://feeds.bbci.co.uk/persian/rss.xml","fa","bbc.com"],
   ["Iran","Iran International","https://www.iranintl.com/en/rss","en","iranintl.com"],
   ["Iran","Radio Farda","https://www.radiofarda.com/api/z-pqpiev-qpp","fa","radiofarda.com"],
@@ -28,7 +32,6 @@ const FEEDS = [
   ["Iran","ILNA","https://www.ilna.ir/rss","fa","ilna.ir"],
   ["Iran","France 24","https://www.france24.com/en/rss","en","france24.com"],
 
-  // MIDDLE EAST
   ["Middle_East","Al Jazeera","https://www.aljazeera.com/xml/rss/all.xml","en","aljazeera.com"],
   ["Middle_East","BBC Middle East","https://feeds.bbci.co.uk/news/world/middle_east/rss.xml","en","bbc.com"],
   ["Middle_East","The Guardian","https://www.theguardian.com/world/middleeast/rss","en","theguardian.com"],
@@ -41,7 +44,6 @@ const FEEDS = [
   ["Middle_East","DW","https://rss.dw.com/xml/rss-en-all","en","dw.com"],
   ["Middle_East","Euronews","https://www.euronews.com/rss","en","euronews.com"],
 
-  // WORLD
   ["World","BBC World","https://feeds.bbci.co.uk/news/world/rss.xml","en","bbc.com"],
   ["World","The Guardian","https://www.theguardian.com/world/rss","en","theguardian.com"],
   ["World","The New York Times","https://rss.nytimes.com/services/xml/rss/nyt/World.xml","en","nytimes.com"],
@@ -58,7 +60,13 @@ const FEEDS = [
   ["World","ANSA","https://www.ansa.it/sito/ansait_rss.xml","it","ansa.it"],
   ["World","Politico Europe","https://www.politico.eu/feed/","en","politico.eu"],
   ["World","Al Jazeera","https://www.aljazeera.com/xml/rss/all.xml","en","aljazeera.com"]
-].map(([category,source,url,lang,domain]) => ({category,source,url,lang,domain}));
+].map(([category,source,url,lang,domain]) => ({
+  category,
+  source,
+  url,
+  lang,
+  domain
+}));
 
 export default {
   async fetch(request, env, ctx) {
@@ -70,11 +78,16 @@ export default {
       } catch (e) {
         console.error("WEBHOOK_ERROR", e?.message || String(e));
       }
+
       return new Response("OK");
     }
 
     if (url.pathname === "/") {
-      return json({ok:true,service:"Nabz",time:new Date().toISOString()});
+      return json({
+        ok: true,
+        service: "Nabz",
+        time: new Date().toISOString()
+      });
     }
 
     if (url.pathname === "/health") {
@@ -82,8 +95,14 @@ export default {
     }
 
     if (url.pathname === "/test-telegram") {
-      try { return json(await tgApi("getMe", {}, env)); }
-      catch (e) { return json({ok:false,error:e?.message || String(e)}, 500); }
+      try {
+        return json(await tgApi("getMe", {}, env));
+      } catch (e) {
+        return json({
+          ok: false,
+          error: e?.message || String(e)
+        }, 500);
+      }
     }
 
     return new Response("Nabz Worker is running.");
@@ -96,208 +115,343 @@ export default {
 
 async function health(url, env) {
   const result = {
-    ok:true,
-    service:"Nabz",
-    botToken:!!env.BOT_TOKEN,
-    ai:!!env.AI,
-    kv:!!env.SEEN,
-    workerUrl:url.origin,
-    telegram:null,
-    webhook:null
+    ok: true,
+    service: "Nabz",
+    botToken: !!env.BOT_TOKEN,
+    ai: !!env.AI,
+    kv: !!env.SEEN,
+    workerUrl: url.origin,
+    telegram: null,
+    webhook: null
   };
 
   try {
     result.telegram = await tgApi("getMe", {}, env);
+
     if (result.telegram?.ok) {
       result.webhook = await ensureWebhook(url.origin, env);
     }
   } catch (e) {
-    result.telegram = {ok:false,error:e?.message || String(e)};
+    result.telegram = {
+      ok: false,
+      error: e?.message || String(e)
+    };
   }
 
   return result;
 }
 
 async function run(env, controller) {
-  console.log("CRON_START", JSON.stringify({
-    cron:controller?.cron,
-    time:controller?.scheduledTime
-  }));
+  console.log(
+    "CRON_START",
+    JSON.stringify({
+      cron: controller?.cron,
+      time: controller?.scheduledTime
+    })
+  );
 
   if (!env.BOT_TOKEN || !env.SEEN || !env.AI) {
-    console.error("MISSING_BINDING_OR_SECRET", JSON.stringify({
-      bot:!!env.BOT_TOKEN,
-      kv:!!env.SEEN,
-      ai:!!env.AI
-    }));
+    console.error("MISSING_BINDING_OR_SECRET");
     return;
   }
 
   try {
-    await ensureWebhook("https://nabz.z-e-u-s-u7mwk9.workers.dev", env);
+    await ensureWebhook(
+      "https://nabz.z-e-u-s-u7mwk9.workers.dev",
+      env
+    );
   } catch (e) {
-    console.error("WEBHOOK_SETUP_ERROR", e?.message || String(e));
+    console.error(
+      "WEBHOOK_SETUP_ERROR",
+      e?.message || String(e)
+    );
   }
 
   const lock = "LOCK:RUN";
+
   if (await env.SEEN.get(lock)) {
-    console.log("CRON_LOCKED");
     return;
   }
 
-  await env.SEEN.put(lock, "1", {expirationTtl:90});
+  await env.SEEN.put(lock, "1", {
+    expirationTtl: 90
+  });
 
   try {
-    // Every feed is checked about every two minutes.
     const groups = split(FEEDS, 2);
-    const group = groups[Math.floor(Date.now()/60000) % 2];
+
+    const group =
+      groups[Math.floor(Date.now() / 60000) % 2];
+
     const fresh = [];
 
-    for (let i=0; i<group.length; i+=FEED_BATCH) {
-      const batch = group.slice(i, i+FEED_BATCH);
+    for (let i = 0; i < group.length; i += FEED_BATCH) {
+      const batch = group.slice(i, i + FEED_BATCH);
 
-      const results = await Promise.all(batch.map(async feed => {
-        try {
-          const items = await fetchFeed(feed);
-          console.log("RSS_OK", feed.source, items.length);
-          return {feed,items};
-        } catch (e) {
-          console.error("RSS_ERROR", feed.source, e?.message || String(e));
-          return {feed,items:[]};
-        }
-      }));
+      const results = await Promise.all(
+        batch.map(async feed => {
+          try {
+            const items = await fetchFeed(feed);
 
-      for (const {feed,items} of results) {
+            console.log(
+              "RSS_OK",
+              feed.source,
+              items.length
+            );
+
+            return {
+              feed,
+              items
+            };
+          } catch (e) {
+            console.error(
+              "RSS_ERROR",
+              feed.source,
+              e?.message || String(e)
+            );
+
+            return {
+              feed,
+              items: []
+            };
+          }
+        })
+      );
+
+      for (const { feed, items } of results) {
         for (const item of items) {
-          const age = Date.now() - item.publishedAt;
-          if (age >= MIN_AGE && age <= MAX_AGE) {
-            fresh.push({feed,item});
+          const age =
+            Date.now() - item.publishedAt;
+
+          if (
+            age >= MIN_AGE &&
+            age <= MAX_AGE
+          ) {
+            fresh.push({
+              feed,
+              item
+            });
           }
         }
       }
     }
 
-    // Oldest eligible item first.
-    fresh.sort((a,b) => a.item.publishedAt - b.item.publishedAt);
+    fresh.sort(
+      (a, b) =>
+        a.item.publishedAt -
+        b.item.publishedAt
+    );
 
     let published = 0;
-    const maxPublish = Math.max(1, Number(env.MAX_PUBLISH_PER_RUN || 3));
+
+    const maxPublish = Math.max(
+      1,
+      Number(env.MAX_PUBLISH_PER_RUN || 3)
+    );
 
     for (const x of fresh) {
-      if (published >= maxPublish) break;
+      if (published >= maxPublish) {
+        break;
+      }
 
       try {
-        if (await publish(x.item, x.feed, env)) {
+        if (
+          await publish(
+            x.item,
+            x.feed,
+            env
+          )
+        ) {
           published++;
         }
       } catch (e) {
-        console.error("ITEM_ERROR", x.feed.source, JSON.stringify({
-          title:x.item.title,
-          error:e?.message || String(e)
-        }));
+        console.error(
+          "ITEM_ERROR",
+          x.feed.source,
+          e?.message || String(e)
+        );
       }
     }
 
-    console.log("CRON_END", JSON.stringify({
-      feeds:group.length,
-      fresh:fresh.length,
-      published
-    }));
+    console.log(
+      "CRON_END",
+      JSON.stringify({
+        feeds: group.length,
+        fresh: fresh.length,
+        published
+      })
+    );
   } finally {
-    await env.SEEN.delete(lock).catch(() => {});
+    await env.SEEN
+      .delete(lock)
+      .catch(() => {});
   }
 }
 
 async function publish(item, feed, env) {
-  const key = await sha256([
-    feed.category,
-    feed.source,
-    normUrl(item.link),
-    normTitle(item.title)
-  ].join("|"));
+  const key = await sha256(
+    [
+      feed.category,
+      feed.source,
+      normUrl(item.link),
+      normTitle(item.title)
+    ].join("|")
+  );
 
   if (
     await env.SEEN.get(`NEWS:${key}`) ||
     await env.SEEN.get(`CLAIM:${key}`)
-  ) return false;
+  ) {
+    return false;
+  }
 
-  await env.SEEN.put(`CLAIM:${key}`, "1", {expirationTtl:300});
+  await env.SEEN.put(
+    `CLAIM:${key}`,
+    "1",
+    {
+      expirationTtl: 300
+    }
+  );
 
   try {
-    console.log("PROCESSING", feed.source, JSON.stringify({
-      title:item.title,
-      age:Math.round((Date.now()-item.publishedAt)/1000)
-    }));
+    const article =
+      await enrichArticle(item);
 
-    // RSS full content first; otherwise fetch the original article page.
-    const article = await enrichArticle(item);
-
-    const tr = await translate({
-      ...item,
-      description:article.text || item.description
-    }, feed, env);
-
-    const imageUrl = article.imageUrl || item.imageUrl || "";
-    const message = buildMessage(tr, item, feed);
-
-    const sent = await sendPost(
-      env,
-      env.GROUP_CHAT_ID,
-      message,
-      thread(feed.category, env),
-      imageUrl
+    const tr = await translate(
+      {
+        ...item,
+        description:
+          article.text ||
+          item.description
+      },
+      feed,
+      env
     );
 
-    await env.SEEN.put(`NEWS:${key}`, JSON.stringify({
-      source:feed.source,
-      title:item.title,
-      link:item.link,
-      telegramMessageId:sent.result?.message_id || null
-    }), {expirationTtl:2592000});
+    const imageUrl =
+      article.imageUrl ||
+      item.imageUrl ||
+      "";
 
-    const count = Number(await env.SEEN.get("STATS:PUBLISHED") || 0);
-    await env.SEEN.put("STATS:PUBLISHED", String(count+1));
+    const sent =
+      await sendPost(
+        env,
+        env.GROUP_CHAT_ID,
+        tr,
+        item,
+        feed,
+        thread(
+          feed.category,
+          env
+        ),
+        imageUrl
+      );
 
-    console.log("PUBLISHED", feed.source, item.title);
+    await env.SEEN.put(
+      `NEWS:${key}`,
+      JSON.stringify({
+        source: feed.source,
+        title: item.title,
+        link: item.link,
+        telegramMessageId:
+          sent.result?.message_id ||
+          null
+      }),
+      {
+        expirationTtl: 2592000
+      }
+    );
+
+    const count =
+      Number(
+        await env.SEEN.get(
+          "STATS:PUBLISHED"
+        ) || 0
+      );
+
+    await env.SEEN.put(
+      "STATS:PUBLISHED",
+      String(count + 1)
+    );
+
     return true;
   } finally {
-    await env.SEEN.delete(`CLAIM:${key}`).catch(() => {});
+    await env.SEEN
+      .delete(`CLAIM:${key}`)
+      .catch(() => {});
   }
 }
 
 async function translate(item, feed, env) {
-  const title = clean(item.title).slice(0,1600);
-  const text = clean(item.description || "").slice(0,MAX_ARTICLE);
+  const title =
+    clean(item.title).slice(0, 1600);
+
+  const text =
+    clean(item.description || "")
+      .slice(0, MAX_ARTICLE);
 
   if (feed.lang === "fa") {
-    return {title,description:text};
+    return {
+      title,
+      description: text
+    };
   }
 
   return {
-    title:await translateText(title, feed.lang, env, true),
-    description:text
-      ? await translateText(text, feed.lang, env, false)
-      : ""
+    title:
+      await translateText(
+        title,
+        feed.lang,
+        env,
+        true
+      ),
+
+    description:
+      text
+        ? await translateText(
+            text,
+            feed.lang,
+            env,
+            false
+          )
+        : ""
   };
 }
 
-async function translateText(text, source, env, isTitle) {
-  const r = await env.AI.run(AI_MODEL, {
-    messages:[
+async function translateText(
+  text,
+  source,
+  env,
+  isTitle
+) {
+  const r =
+    await env.AI.run(
+      AI_MODEL,
       {
-        role:"system",
-        content:
-          "تو مترجم حرفه‌ای خبر به فارسی هستی. فقط ترجمه کن. خلاصه نکن. هیچ جمله‌ای را حذف نکن. هیچ اطلاعاتی اضافه نکن. تحلیل یا نظر نده. نام اشخاص، مکان‌ها، سازمان‌ها، اعداد و نقل‌قول‌ها را دقیق حفظ کن. ساختار پاراگراف‌ها را تا حد ممکن حفظ کن. فارسی طبیعی و لحن خبری رسمی باشد. خروجی فقط ترجمه باشد."
-      },
-      {
-        role:"user",
-        content:
-          `زبان مبدأ: ${source}\nنوع متن: ${isTitle ? "عنوان خبر" : "متن کامل خبر"}\n\n${text}`
+        messages: [
+          {
+            role: "system",
+            content:
+              "تو مترجم حرفه‌ای خبر به فارسی هستی. فقط ترجمه کن. خلاصه نکن. هیچ جمله‌ای را حذف نکن. هیچ اطلاعاتی اضافه نکن. تحلیل یا نظر نده. نام اشخاص، مکان‌ها، سازمان‌ها، اعداد و نقل‌قول‌ها را دقیق حفظ کن. ساختار پاراگراف‌ها را تا حد ممکن حفظ کن. فارسی طبیعی و لحن خبری رسمی باشد. خروجی فقط ترجمه باشد."
+          },
+          {
+            role: "user",
+            content:
+              `زبان مبدأ: ${source}\n` +
+              `نوع متن: ${
+                isTitle
+                  ? "عنوان خبر"
+                  : "متن کامل خبر"
+              }\n\n${text}`
+          }
+        ],
+
+        temperature: 0.1,
+
+        max_completion_tokens:
+          isTitle ? 300 : 7000
       }
-    ],
-    temperature:0.1,
-    max_completion_tokens:isTitle ? 300 : 7000
-  });
+    );
 
   const out = clean(
     r?.response ||
@@ -305,95 +459,182 @@ async function translateText(text, source, env, isTitle) {
     ""
   );
 
-  if (!out) throw new Error("AI returned empty translation");
+  if (!out) {
+    throw new Error(
+      "AI returned empty translation"
+    );
+  }
+
   return out;
 }
 
-function buildMessage(tr, item, feed) {
+async function sendPost(
+  env,
+  chat,
+  tr,
+  item,
+  feed,
+  threadId,
+  imageUrl
+) {
   const tag =
-    feed.category === "Iran" ? "#Iran" :
-    feed.category === "Middle_East" ? "#Middle_East" :
-    "#World";
+    feed.category === "Iran"
+      ? "#Iran"
+      : feed.category === "Middle_East"
+        ? "#Middle_East"
+        : "#World";
 
-  const title = trimText(tr.title, 700);
-  const description = trimText(tr.description, MAX_CAPTION);
+  const title =
+    `<b>${esc(
+      trimText(tr.title, 700)
+    )}</b>`;
 
-  let s = `<b>${esc(title)}</b>`;
+  const footer =
+    `🌐 منبع: ${esc(feed.source)}\n` +
+    `🔗 <a href="${esc(item.link)}">مشاهده گزارش اصلی</a>\n` +
+    `${tag}\n\n` +
+    FOOTER;
 
-  if (description) {
-    s += `\n\n${esc(description)}`;
-  }
+  const full =
+    `${title}` +
+    `${tr.description
+      ? `\n\n${esc(tr.description)}`
+      : ""}` +
+    `\n\n${footer}`;
 
-  s += `\n\n🌐 منبع: ${esc(feed.source)}`;
-  s += `\n🔗 <a href="${esc(item.link)}">مشاهده گزارش اصلی</a>`;
-  s += `\n${tag}\n\n${FOOTER}`;
-
-  return s;
-}
-
-async function sendPost(env, chat, text, threadId, imageUrl) {
   if (imageUrl) {
     try {
-      const p = {
-        chat_id:normChat(chat),
-        photo:imageUrl,
-        caption:text,
-        parse_mode:"HTML"
+      const caption =
+        `${title}\n\n${footer}`;
+
+      const photoPayload = {
+        chat_id: normChat(chat),
+        photo: imageUrl,
+        caption: trimText(
+          caption,
+          TG_CAPTION_LIMIT
+        ),
+        parse_mode: "HTML"
       };
 
-      if (threadId != null && String(threadId) !== "") {
-        p.message_thread_id = Number(threadId);
+      if (
+        threadId != null &&
+        String(threadId) !== ""
+      ) {
+        photoPayload.message_thread_id =
+          Number(threadId);
       }
 
-      return await tgApi("sendPhoto", p, env);
+      const photo =
+        await tgApi(
+          "sendPhoto",
+          photoPayload,
+          env
+        );
+
+      if (tr.description) {
+        await send(
+          env,
+          chat,
+          trimText(
+            esc(tr.description),
+            TG_TEXT_LIMIT
+          ),
+          threadId
+        );
+      }
+
+      return photo;
     } catch (e) {
-      // Never lose a news item just because its image failed.
-      console.error("PHOTO_SEND_FAILED", e?.message || String(e));
+      console.error(
+        "PHOTO_SEND_FAILED",
+        e?.message || String(e)
+      );
     }
   }
 
-  return send(env, chat, text, threadId);
+  return send(
+    env,
+    chat,
+    trimText(full, TG_TEXT_LIMIT),
+    threadId
+  );
 }
 
-async function send(env, chat, text, threadId) {
+async function send(
+  env,
+  chat,
+  text,
+  threadId
+) {
   const p = {
-    chat_id:normChat(chat),
-    text,
-    parse_mode:"HTML",
-    disable_web_page_preview:true
+    chat_id: normChat(chat),
+    text: trimText(
+      text,
+      TG_TEXT_LIMIT
+    ),
+    parse_mode: "HTML",
+    disable_web_page_preview: true
   };
 
-  if (threadId != null && String(threadId) !== "") {
-    p.message_thread_id = Number(threadId);
+  if (
+    threadId != null &&
+    String(threadId) !== ""
+  ) {
+    p.message_thread_id =
+      Number(threadId);
   }
 
-  return tgApi("sendMessage", p, env);
+  return tgApi(
+    "sendMessage",
+    p,
+    env
+  );
 }
 
-async function tgApi(method, payload, env) {
-  if (!env.BOT_TOKEN) throw new Error("BOT_TOKEN missing");
+async function tgApi(
+  method,
+  payload,
+  env
+) {
+  if (!env.BOT_TOKEN) {
+    throw new Error(
+      "BOT_TOKEN missing"
+    );
+  }
 
   const r = await fetch(
     `https://api.telegram.org/bot${env.BOT_TOKEN}/${method}`,
     {
-      method:"POST",
-      headers:{"content-type":"application/json"},
-      body:JSON.stringify(payload)
+      method: "POST",
+      headers: {
+        "content-type":
+          "application/json"
+      },
+      body: JSON.stringify(payload)
     }
   );
 
   const raw = await r.text();
+
   let d;
 
   try {
     d = JSON.parse(raw);
   } catch {
-    throw new Error(`Telegram HTTP ${r.status}: ${raw.slice(0,300)}`);
+    throw new Error(
+      `Telegram HTTP ${r.status}: ${raw.slice(
+        0,
+        300
+      )}`
+    );
   }
 
   if (!r.ok || !d.ok) {
     throw new Error(
-      `Telegram HTTP ${r.status}: ${d.description || "unknown"}`
+      `Telegram HTTP ${r.status}: ${
+        d.description || "unknown"
+      }`
     );
   }
 
@@ -408,64 +649,127 @@ async function fetchFeed(feed) {
 
   let lastError;
 
-  for (let i=0; i<urls.length; i++) {
+  for (
+    let i = 0;
+    i < urls.length;
+    i++
+  ) {
     try {
-      const xml = await fetchText(urls[i], FEED_TIMEOUT);
+      const xml =
+        await fetchText(
+          urls[i],
+          FEED_TIMEOUT
+        );
+
       const items = parse(xml);
 
-      // Use the direct feed when it is producing current items.
-      // If it is blocked/stale, automatically use the fallback.
-      const hasRecent = items.some(
-        x => Date.now() - x.publishedAt <= 60*60*1000
-      );
+      const hasRecent =
+        items.some(
+          x =>
+            Date.now() -
+              x.publishedAt <=
+            60 * 60 * 1000
+        );
 
-      if (items.length && (i === urls.length-1 || hasRecent)) {
+      if (
+        items.length &&
+        (
+          i === urls.length - 1 ||
+          hasRecent
+        )
+      ) {
         return items;
       }
 
-      lastError = new Error("feed stale");
+      lastError =
+        new Error("feed stale");
     } catch (e) {
       lastError = e;
     }
   }
 
-  throw lastError || new Error("feed unavailable");
+  throw (
+    lastError ||
+    new Error(
+      "feed unavailable"
+    )
+  );
 }
 
 function googleFallback(feed) {
-  const q = `site:${feed.domain} when:1h`;
+  const q =
+    `site:${feed.domain} when:1h`;
+
   return (
-    `https://news.google.com/rss/search?q=${encodeURIComponent(q)}` +
+    `https://news.google.com/rss/search?q=` +
+    `${encodeURIComponent(q)}` +
     `&hl=en-US&gl=US&ceid=US:en`
   );
 }
 
-async function fetchText(url, timeout) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+async function fetchText(
+  url,
+  timeout
+) {
+  const controller =
+    new AbortController();
+
+  const timer =
+    setTimeout(
+      () => controller.abort(),
+      timeout
+    );
 
   try {
-    const r = await fetch(url, {
-      redirect:"follow",
-      headers:{
-        "User-Agent":"Mozilla/5.0 (compatible; Nabz/4.0)",
-        "Accept":
-          "application/rss+xml,application/atom+xml,application/xml,text/xml,text/html,*/*"
-      },
-      cf:{cacheTtl:0,cacheEverything:false},
-      signal:controller.signal
-    });
+    const r =
+      await fetch(
+        url,
+        {
+          redirect: "follow",
 
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (compatible; Nabz/5.0)",
 
-    const text = await r.text();
-    if (text.length < 50) throw new Error("empty response");
+            "Accept":
+              "application/rss+xml,application/atom+xml,application/xml,text/xml,text/html,*/*"
+          },
+
+          cf: {
+            cacheTtl: 0,
+            cacheEverything: false
+          },
+
+          signal: controller.signal
+        }
+      );
+
+    if (!r.ok) {
+      throw new Error(
+        `HTTP ${r.status}`
+      );
+    }
+
+    const text =
+      await r.text();
+
+    if (text.length < 50) {
+      throw new Error(
+        "empty response"
+      );
+    }
 
     return text;
   } catch (e) {
-    if (e?.name === "AbortError") {
-      throw new Error(`timeout after ${timeout}ms`);
+    if (
+      e?.name ===
+      "AbortError"
+    ) {
+      throw new Error(
+        `timeout after ${timeout}ms`
+      );
     }
+
     throw e;
   } finally {
     clearTimeout(timer);
@@ -475,44 +779,64 @@ async function fetchText(url, timeout) {
 function parse(xml) {
   const out = [];
 
-  for (const block of xml.match(/<item\b[\s\S]*?<\/item>/gi) || []) {
-    const title = tag(block, ["title"]);
+  for (
+    const block of
+      xml.match(
+        /<item\b[\s\S]*?<\/item>/gi
+      ) || []
+  ) {
+    const title =
+      tag(block, ["title"]);
 
-    // IMPORTANT: full content comes before short description.
-    const description = tag(block, [
-      "content:encoded",
-      "content",
-      "description"
-    ]);
+    const description =
+      tag(block, [
+        "content:encoded",
+        "content",
+        "description"
+      ]);
 
-    const link = cleanUrl(
-      tag(block, ["link"]) ||
-      tag(block, ["guid"])
-    );
+    const link =
+      cleanUrl(
+        tag(block, ["link"]) ||
+        tag(block, ["guid"])
+      );
 
-    const guid = clean(
-      tag(block, ["guid"]) || link
-    );
+    const guid =
+      clean(
+        tag(block, ["guid"]) ||
+        link
+      );
 
-    const date = tag(block, [
-      "pubDate",
-      "dc:date",
-      "published",
-      "updated"
-    ]);
+    const date =
+      tag(block, [
+        "pubDate",
+        "dc:date",
+        "published",
+        "updated"
+      ]);
 
-    const publishedAt = Date.parse(clean(date));
-    const imageUrl = extractImage(block);
+    const publishedAt =
+      Date.parse(
+        clean(date)
+      );
+
+    const imageUrl =
+      extractImage(block);
 
     if (
       title &&
-      Number.isFinite(publishedAt) &&
+      Number.isFinite(
+        publishedAt
+      ) &&
       publishedAt &&
       link
     ) {
       out.push({
-        title:clean(title),
-        description:clean(description || ""),
+        title: clean(title),
+        description:
+          clean(
+            description || ""
+          ),
         link,
         guid,
         publishedAt,
@@ -522,24 +846,60 @@ function parse(xml) {
   }
 
   if (!out.length) {
-    for (const block of xml.match(/<entry\b[\s\S]*?<\/entry>/gi) || []) {
-      const title = tag(block, ["title"]);
-      const description = tag(block, ["content","summary"]);
-      const date = tag(block, ["published","updated"]);
-      const publishedAt = Date.parse(clean(date));
-      const link = cleanUrl(atomLink(block));
-      const guid = clean(tag(block, ["id"]) || link);
-      const imageUrl = extractImage(block);
+    for (
+      const block of
+        xml.match(
+          /<entry\b[\s\S]*?<\/entry>/gi
+        ) || []
+    ) {
+      const title =
+        tag(block, ["title"]);
+
+      const description =
+        tag(block, [
+          "content",
+          "summary"
+        ]);
+
+      const date =
+        tag(block, [
+          "published",
+          "updated"
+        ]);
+
+      const publishedAt =
+        Date.parse(
+          clean(date)
+        );
+
+      const link =
+        cleanUrl(
+          atomLink(block)
+        );
+
+      const guid =
+        clean(
+          tag(block, ["id"]) ||
+          link
+        );
+
+      const imageUrl =
+        extractImage(block);
 
       if (
         title &&
-        Number.isFinite(publishedAt) &&
+        Number.isFinite(
+          publishedAt
+        ) &&
         publishedAt &&
         link
       ) {
         out.push({
-          title:clean(title),
-          description:clean(description || ""),
+          title: clean(title),
+          description:
+            clean(
+              description || ""
+            ),
           link,
           guid,
           publishedAt,
@@ -550,84 +910,119 @@ function parse(xml) {
   }
 
   return out
-    .filter(x => x.publishedAt)
-    .sort((a,b) => b.publishedAt - a.publishedAt)
-    .slice(0,20);
+    .sort(
+      (a, b) =>
+        b.publishedAt -
+        a.publishedAt
+    )
+    .slice(0, 20);
 }
 
 async function enrichArticle(item) {
-  let imageUrl = item.imageUrl || "";
-  let text = clean(item.description || "");
+  let imageUrl =
+    item.imageUrl || "";
 
-  // If RSS already has a substantial body, use it directly.
-  // Otherwise fetch the original article and try to recover the body + OG image.
-  if (text.length >= 700 && imageUrl) {
-    return {
-      text:text.slice(0,MAX_ARTICLE),
-      imageUrl
-    };
-  }
+  let text =
+    clean(
+      item.description || ""
+    );
 
   try {
-    const html = await fetchText(item.link, ARTICLE_TIMEOUT);
+    const html =
+      await fetchText(
+        item.link,
+        ARTICLE_TIMEOUT
+      );
 
-    imageUrl = imageUrl || extractImage(html);
+    imageUrl =
+      imageUrl ||
+      extractImage(html);
 
-    const articleHtml = extractArticleHtml(html);
-    const articleText = clean(articleHtml);
+    const articleText =
+      clean(
+        extractArticleHtml(
+          html
+        )
+      );
 
     if (
       articleText.length > 500 &&
-      articleText.length > text.length * 1.25
+      articleText.length >
+        text.length * 1.25
     ) {
-      text = articleText;
+      text =
+        articleText;
     }
   } catch (e) {
     console.log(
       "ARTICLE_FETCH_FAILED",
-      item.link,
       e?.message || String(e)
     );
   }
 
   return {
-    text:text.slice(0,MAX_ARTICLE),
+    text: text.slice(
+      0,
+      MAX_ARTICLE
+    ),
     imageUrl
   };
 }
 
 function extractArticleHtml(html) {
-  const cleaned = html
-    .replace(
+  const cleaned =
+    html.replace(
       /<(script|style|noscript|nav|header|footer|aside|form|svg)[^>]*>[\s\S]*?<\/\1>/gi,
       " "
     );
 
   const candidates = [];
 
-  for (const re of [
-    /<article\b[^>]*>([\s\S]*?)<\/article>/gi,
-    /<main\b[^>]*>([\s\S]*?)<\/main>/gi
-  ]) {
-    for (const m of cleaned.matchAll(re)) {
-      candidates.push(m[1]);
+  for (
+    const re of [
+      /<article\b[^>]*>([\s\S]*?)<\/article>/gi,
+      /<main\b[^>]*>([\s\S]*?)<\/main>/gi
+    ]
+  ) {
+    for (
+      const m of
+        cleaned.matchAll(re)
+    ) {
+      candidates.push(
+        m[1]
+      );
     }
   }
 
-  for (const m of cleaned.matchAll(
-    /<(?:div|section)\b[^>]*(?:id|class)=["'][^"']*(?:article|story|content|post|entry)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/gi
-  )) {
-    candidates.push(m[1]);
+  for (
+    const m of
+      cleaned.matchAll(
+        /<(?:div|section)\b[^>]*(?:id|class)=["'][^"']*(?:article|story|content|post|entry)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/gi
+      )
+  ) {
+    candidates.push(
+      m[1]
+    );
   }
 
-  candidates.sort((a,b) => scoreHtml(b) - scoreHtml(a));
+  candidates.sort(
+    (a, b) =>
+      scoreHtml(b) -
+      scoreHtml(a)
+  );
 
-  return candidates[0] || "";
+  return (
+    candidates[0] || ""
+  );
 }
 
 function scoreHtml(html) {
   return (
-    (html.match(/<p\b/gi) || []).length * 250 +
+    (
+      html.match(
+        /<p\b/gi
+      ) || []
+    ).length * 250 +
     clean(html).length
   );
 }
@@ -644,14 +1039,22 @@ function extractImage(block) {
     /<img\b[^>]*src=["']([^"']+)["']/i
   ];
 
-  for (const re of patterns) {
-    const match = block.match(re);
+  for (
+    const re of patterns
+  ) {
+    const m =
+      block.match(re);
 
-    if (match?.[1]) {
-      const url = cleanUrl(match[1]);
+    if (m?.[1]) {
+      const u =
+        cleanUrl(m[1]);
 
-      if (/^https?:\/\//i.test(url)) {
-        return url;
+      if (
+        /^https?:\/\//i.test(
+          u
+        )
+      ) {
+        return u;
       }
     }
   }
@@ -660,28 +1063,51 @@ function extractImage(block) {
 }
 
 function tag(block, tags) {
-  for (const t of tags) {
-    const safe = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (
+    const t of tags
+  ) {
+    const safe =
+      t.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
 
-    const match = block.match(
-      new RegExp(
-        `<${safe}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${safe}>`,
-        "i"
-      )
-    );
+    const m =
+      block.match(
+        new RegExp(
+          `<${safe}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${safe}>`,
+          "i"
+        )
+      );
 
-    if (match?.[1]) return decode(match[1]);
+    if (m?.[1]) {
+      return decode(
+        m[1]
+      );
+    }
   }
 
   return "";
 }
 
 function atomLink(block) {
-  for (const tagText of block.match(/<link\b[^>]*>/gi) || []) {
-    const href = attr(tagText, "href");
-    const rel = attr(tagText, "rel");
+  for (
+    const t of
+      block.match(
+        /<link\b[^>]*>/gi
+      ) || []
+  ) {
+    const href =
+      attr(t, "href");
 
-    if (href && (!rel || rel === "alternate")) {
+    const rel =
+      attr(t, "rel");
+
+    if (
+      href &&
+      (!rel ||
+        rel === "alternate")
+    ) {
       return href;
     }
   }
@@ -689,7 +1115,10 @@ function atomLink(block) {
   return "";
 }
 
-function attr(text, name) {
+function attr(
+  text,
+  name
+) {
   return (
     text.match(
       new RegExp(
@@ -700,17 +1129,28 @@ function attr(text, name) {
   );
 }
 
-function split(array, n) {
-  const groups = Array.from({length:n}, () => []);
+function split(
+  array,
+  n
+) {
+  const g =
+    Array.from(
+      { length: n },
+      () => []
+    );
 
-  array.forEach((item, index) => {
-    groups[index % n].push(item);
-  });
+  array.forEach(
+    (x, i) =>
+      g[i % n].push(x)
+  );
 
-  return groups;
+  return g;
 }
 
-function thread(category, env) {
+function thread(
+  category,
+  env
+) {
   return category === "Iran"
     ? env.TOPIC_IRAN
     : category === "Middle_East"
@@ -719,30 +1159,47 @@ function thread(category, env) {
 }
 
 function normChat(value) {
-  const s = String(value || "").trim();
+  const s =
+    String(
+      value || ""
+    ).trim();
 
-  if (/^-\d+$/.test(s)) return s;
-  if (/^\d+$/.test(s)) return `-100${s}`;
+  if (
+    /^-\d+$/.test(s)
+  ) {
+    return s;
+  }
+
+  if (
+    /^\d+$/.test(s)
+  ) {
+    return `-100${s}`;
+  }
 
   return s;
 }
 
 function normUrl(value) {
   try {
-    const u = new URL(value);
+    const u =
+      new URL(value);
 
     u.hash = "";
 
-    for (const p of [
-      "utm_source",
-      "utm_medium",
-      "utm_campaign",
-      "utm_term",
-      "utm_content",
-      "fbclid",
-      "gclid"
-    ]) {
-      u.searchParams.delete(p);
+    for (
+      const p of [
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "fbclid",
+        "gclid"
+      ]
+    ) {
+      u.searchParams.delete(
+        p
+      );
     }
 
     return u
@@ -750,98 +1207,230 @@ function normUrl(value) {
       .replace(/\/$/, "")
       .toLowerCase();
   } catch {
-    return String(value || "").trim().toLowerCase();
+    return String(
+      value || ""
+    )
+      .trim()
+      .toLowerCase();
   }
 }
 
 function normTitle(value) {
-  return String(value || "")
+  return String(
+    value || ""
+  )
     .toLowerCase()
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(
+      /https?:\/\/\S+/g,
+      ""
+    )
+    .replace(
+      /[^\p{L}\p{N}]+/gu,
+      " "
+    )
     .trim()
-    .replace(/\s+/g, " ");
+    .replace(
+      /\s+/g,
+      " "
+    );
 }
 
 function clean(value) {
   return decode(
     String(value || "")
-      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/p>/gi, "\n")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\r/g, "")
-      .replace(/[ \t]+/g, " ")
-      .replace(/\n{3,}/g, "\n\n")
+      .replace(
+        /<!\[CDATA\[([\s\S]*?)\]\]>/gi,
+        "$1"
+      )
+      .replace(
+        /<script[\s\S]*?<\/script>/gi,
+        ""
+      )
+      .replace(
+        /<style[\s\S]*?<\/style>/gi,
+        ""
+      )
+      .replace(
+        /<br\s*\/?>/gi,
+        "\n"
+      )
+      .replace(
+        /<\/p>/gi,
+        "\n"
+      )
+      .replace(
+        /<[^>]+>/g,
+        " "
+      )
+      .replace(
+        /\r/g,
+        ""
+      )
+      .replace(
+        /[ \t]+/g,
+        " "
+      )
+      .replace(
+        /\n{3,}/g,
+        "\n\n"
+      )
       .trim()
   );
 }
 
 function decode(value) {
-  return String(value || "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#(\d+);/g, (_, n) =>
-      String.fromCodePoint(Number(n))
+  return String(
+    value || ""
+  )
+    .replace(
+      /&nbsp;/gi,
+      " "
     )
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) =>
-      String.fromCodePoint(parseInt(n,16))
+    .replace(
+      /&amp;/gi,
+      "&"
+    )
+    .replace(
+      /&quot;/gi,
+      '"'
+    )
+    .replace(
+      /&#39;/gi,
+      "'"
+    )
+    .replace(
+      /&apos;/gi,
+      "'"
+    )
+    .replace(
+      /&lt;/gi,
+      "<"
+    )
+    .replace(
+      /&gt;/gi,
+      ">"
+    )
+    .replace(
+      /&#(\d+);/g,
+      (_, n) =>
+        String.fromCodePoint(
+          Number(n)
+        )
+    )
+    .replace(
+      /&#x([0-9a-f]+);/gi,
+      (_, n) =>
+        String.fromCodePoint(
+          parseInt(n, 16)
+        )
     );
 }
 
-function trimText(value, max) {
-  const s = String(value || "").trim();
+function trimText(
+  value,
+  max
+) {
+  const s =
+    String(
+      value || ""
+    ).trim();
 
-  if (s.length <= max) return s;
+  if (
+    s.length <= max
+  ) {
+    return s;
+  }
 
-  return s.slice(0, max - 1).trim() + "…";
+  return (
+    s
+      .slice(0, max - 1)
+      .trim() + "…"
+  );
 }
 
 function esc(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return String(
+    value || ""
+  )
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    );
 }
 
 function cleanUrl(value) {
   return decode(
     String(value || "")
       .trim()
-      .replace(/^<|>$/g, "")
+      .replace(
+        /^<|>$/g,
+        ""
+      )
       .trim()
   );
 }
 
-async function sha256(value) {
-  const bytes = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest("SHA-256", bytes);
+async function sha256(
+  value
+) {
+  const bytes =
+    new TextEncoder()
+      .encode(value);
 
-  return [...new Uint8Array(hash)]
-    .map(x => x.toString(16).padStart(2,"0"))
+  const hash =
+    await crypto.subtle.digest(
+      "SHA-256",
+      bytes
+    );
+
+  return [
+    ...new Uint8Array(hash)
+  ]
+    .map(x =>
+      x.toString(16)
+        .padStart(2, "0")
+    )
     .join("");
 }
 
-async function handleUpdate(update, env) {
-  const message = update?.message;
+async function handleUpdate(
+  update,
+  env
+) {
+  const message =
+    update?.message;
 
-  if (!message?.text || !message.chat?.id) return;
+  if (
+    !message?.text ||
+    !message.chat?.id
+  ) {
+    return;
+  }
 
-  const command = String(message.text)
-    .trim()
-    .split(/\s+/)[0]
-    .split("@")[0]
-    .toLowerCase();
+  const command =
+    String(
+      message.text
+    )
+      .trim()
+      .split(/\s+/)[0]
+      .split("@")[0]
+      .toLowerCase();
 
-  if (command === "/start") {
+  if (
+    command === "/start"
+  ) {
     return send(
       env,
       message.chat.id,
@@ -850,8 +1439,15 @@ async function handleUpdate(update, env) {
     );
   }
 
-  if (command === "/status" || command === "/stats") {
-    if (String(message.from?.id || "") !== ADMIN_ID) {
+  if (
+    command === "/status" ||
+    command === "/stats"
+  ) {
+    if (
+      String(
+        message.from?.id || ""
+      ) !== ADMIN_ID
+    ) {
       return send(
         env,
         message.chat.id,
@@ -859,9 +1455,12 @@ async function handleUpdate(update, env) {
       );
     }
 
-    const count = Number(
-      await env.SEEN.get("STATS:PUBLISHED") || 0
-    );
+    const count =
+      Number(
+        await env.SEEN.get(
+          "STATS:PUBLISHED"
+        ) || 0
+      );
 
     return send(
       env,
@@ -876,17 +1475,31 @@ async function handleUpdate(update, env) {
   }
 }
 
-async function ensureWebhook(origin, env) {
-  const info = await tgApi("getWebhookInfo", {}, env);
-  const target = `${origin}/telegram`;
-  const current = info?.result?.url || "";
+async function ensureWebhook(
+  origin,
+  env
+) {
+  const info =
+    await tgApi(
+      "getWebhookInfo",
+      {},
+      env
+    );
 
-  if (current !== target) {
+  const target =
+    `${origin}/telegram`;
+
+  if (
+    (info?.result?.url || "") !==
+    target
+  ) {
     return tgApi(
       "setWebhook",
       {
-        url:target,
-        allowed_updates:["message"]
+        url: target,
+        allowed_updates: [
+          "message"
+        ]
       },
       env
     );
@@ -895,13 +1508,21 @@ async function ensureWebhook(origin, env) {
   return info;
 }
 
-function json(value, status=200) {
+function json(
+  value,
+  status = 200
+) {
   return new Response(
-    JSON.stringify(value, null, 2),
+    JSON.stringify(
+      value,
+      null,
+      2
+    ),
     {
       status,
-      headers:{
-        "content-type":"application/json;charset=UTF-8"
+      headers: {
+        "content-type":
+          "application/json;charset=UTF-8"
       }
     }
   );
