@@ -1,7 +1,10 @@
 const AI_MODEL = "@cf/zai-org/glm-4.7-flash";
 
 const MIN_AGE = 2 * 60 * 1000;
-const MAX_AGE = 5 * 60 * 1000;
+const MAX_AGE = 60 * 60 * 1000;
+
+const BOT_ENABLED_KEY = "BOT:ENABLED";
+const DEFAULT_BOT_ENABLED = false;
 
 const FEED_TIMEOUT = 8000;
 const ARTICLE_TIMEOUT = 9000;
